@@ -1,0 +1,84 @@
+<ion-header>
+  <ion-toolbar color="primary">
+    <ion-title>Météo</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding" [ngClass]="getBackgroundClass()">
+  <!-- Champ de recherche -->
+  <ion-searchbar 
+    [(ngModel)]="searchCity" 
+    placeholder="Rechercher une ville (ex: Paris)" 
+    (ionInput)="searchWeather()"
+    debounce="500"
+    class="custom-searchbar">
+  </ion-searchbar>
+
+  <!-- Carte météo principale -->
+  <ion-card *ngIf="weatherData" class="weather-card main-weather-card">
+    <ion-card-header class="weather-header">
+      <ion-card-title>
+        {{ weatherData.city || searchCity }}<span class="country">, {{ weatherData.country !== 'N/A' ? weatherData.country : '' }}</span>
+      </ion-card-title>
+      <ion-card-subtitle>{{ weatherData.date }}</ion-card-subtitle>
+    </ion-card-header>
+    <ion-card-content class="weather-content">
+      <div class="weather-main">
+        <ion-icon [name]="getWeatherIcon(weatherData.conditions)" class="weather-icon"></ion-icon>
+        <div class="temperature">{{ weatherData.temperature | number:'1.0-0' }}°C</div>
+      </div>
+      <p class="conditions">{{ weatherData.conditions }}</p>
+      <ion-grid class="weather-details">
+        <ion-row>
+          <ion-col size="6">
+            <ion-icon name="water-outline"></ion-icon> Humidité: {{ weatherData.humidity }}%
+          </ion-col>
+          <ion-col size="6">
+            <ion-icon name="speedometer-outline"></ion-icon> Vent: {{ weatherData.windSpeed }} km/h
+          </ion-col>
+        </ion-row>
+        <ion-row>
+          <ion-col size="6">
+            <ion-icon name="sunny-outline"></ion-icon> Lever: {{ weatherData.sunrise }}
+          </ion-col>
+          <ion-col size="6">
+            <ion-icon name="moon-outline"></ion-icon> Coucher: {{ weatherData.sunset }}
+          </ion-col>
+        </ion-row>
+      </ion-grid>
+    </ion-card-content>
+  </ion-card>
+
+  <!-- Bouton pour ajouter la ville actuelle aux favoris -->
+  <ion-button 
+  expand="block" 
+  color="secondary" 
+  (click)="addFavoriteCity()" 
+  *ngIf="weatherData && favoriteCities && !favoriteCities.includes(searchCity) && searchCity.trim() !== ''"
+  [disabled]="!weatherData">
+  Ajouter {{ searchCity }} aux favoris
+  </ion-button>
+
+  <!-- Liste des villes favorites avec cartes compactes -->
+  <div class="favorite-cities" *ngIf="favoriteCities.length > 0">
+    <ion-card *ngFor="let city of favoriteCities" class="favorite-weather-card" (click)="loadWeather(city)">
+      <ion-card-content class="favorite-weather-content">
+        <div class="favorite-weather-main">
+          <ion-label>{{ city }}</ion-label>
+          <div class="favorite-weather-info">
+            <ion-icon [name]="getWeatherIcon(favoriteWeatherData[city]?.conditions || 'N/A')"></ion-icon>
+            <span>{{ favoriteWeatherData[city]?.temperature != null ? (favoriteWeatherData[city].temperature | number:'1.0-0') : 'N/A' }}°C</span>
+          </div>
+        </div>
+        <ion-button fill="clear" color="danger" (click)="removeCity(city); $event.stopPropagation()">
+          <ion-icon name="trash"></ion-icon>
+        </ion-button>
+      </ion-card-content>
+    </ion-card>
+  </div>
+
+  <!-- Message si aucune donnée -->
+  <ion-text color="medium" *ngIf="!weatherData && searchCity" class="no-data">
+    <p>Aucune donnée météo disponible pour "{{ searchCity }}".</p>
+  </ion-text>
+</ion-content>

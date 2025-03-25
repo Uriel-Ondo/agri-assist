@@ -1,0 +1,35 @@
+.register-container {
+    max-width: 400px;
+    margin: 0 auto;
+    padding: 20px;
+    text-align: center;
+  
+    h1 {
+      color: #1877f2;
+      font-size: 2rem;
+      margin-bottom: 20px;
+    }
+  
+    .input-item {
+      margin-bottom: 15px;
+      border: 1px solid #dddfe2;
+      border-radius: 5px;
+      --padding-start: 10px;
+    }
+  
+    ion-button {
+      margin-top: 20px;
+      text-transform: none;
+      font-size: 16px;
+      --border-radius: 5px;
+    }
+  
+    .login-link {
+      margin-top: 15px;
+      a {
+        color: #1877f2;
+        text-decoration: none;
+        cursor: pointer;
+      }
+    }
+  }

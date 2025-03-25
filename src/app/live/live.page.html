@@ -1,0 +1,78 @@
+<!DOCTYPE html PUBLIC "-//HbbTV//1.1.1//EN" "http://www.hbbtv.org/dtd/HbbTV-1.1.1.dtd">
+<ion-header>
+  <ion-toolbar color="primary" class="header-toolbar">
+    <ion-title>Émission en Direct</ion-title>
+    <ion-buttons slot="end">
+      <ion-button color="light">
+        <ion-icon name="people-outline" slot="icon-only"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding">
+  <!-- Sélecteur de chaînes -->
+  <ion-item class="channel-selector">
+    <ion-label>Choisir une chaîne</ion-label>
+    <ion-select [(ngModel)]="selectedChannel" (ionChange)="changeChannel()">
+      <ion-select-option value="france2">EURONEWS</ion-select-option>
+      <ion-select-option value="tf1">France24</ion-select-option>
+      <ion-select-option value="m6">M6</ion-select-option>
+    </ion-select>
+  </ion-item>
+
+  <!-- Section Vidéo -->
+  <ion-card class="video-card">
+    <ion-card-content>
+      <!-- Indicateur de chargement -->
+      <ion-spinner *ngIf="isLoading" name="crescent" class="video-spinner"></ion-spinner>
+      <!-- Message d'erreur -->
+      <div *ngIf="videoError" class="video-error">
+        <p>Erreur lors du chargement de la vidéo. Veuillez réessayer.</p>
+      </div>
+      <!-- Objet HbbTV pour la diffusion TNT -->
+      <object id="broadcast-video" type="video/broadcast" class="live-video"></object>
+      <!-- Lecteur HLS de secours -->
+      <video id="hls-video" class="live-video" controls style="display: none;"></video>
+    </ion-card-content>
+  </ion-card>
+
+  <!-- Section Commentaires -->
+  <ion-card class="comments-card">
+    <ion-card-header>
+      <ion-card-title>Commentaires en Direct</ion-card-title>
+    </ion-card-header>
+    <ion-card-content>
+      <ion-list class="comments-list">
+        <ion-item *ngFor="let comment of comments" class="comment-item">
+          <div class="comment-bubble">
+            <div class="comment-header">
+              <ion-avatar>
+                <img src="https://ionicframework.com/docs/img/demos/avatar.svg" alt="Avatar">
+              </ion-avatar>
+              <div class="comment-meta">
+                <span class="comment-username">{{ comment.username }}</span>
+                <span class="comment-time">{{ comment.created_at | date:'HH:mm:ss' }}</span>
+              </div>
+            </div>
+            <div class="comment-content">
+              <p>{{ comment.comment }}</p>
+            </div>
+          </div>
+        </ion-item>
+      </ion-list>
+
+      <!-- Formulaire d'envoi -->
+      <ion-item class="comment-input">
+        <ion-input
+          [(ngModel)]="newComment"
+          placeholder="Écrire un commentaire..."
+          (keyup.enter)="sendComment()"
+        ></ion-input>
+        <ion-button slot="end" color="primary" (click)="sendComment()">
+          <ion-icon name="leaf-outline" slot="icon-only"></ion-icon>
+        </ion-button>
+      </ion-item>
+    </ion-card-content>
+  </ion-card>
+</ion-content>

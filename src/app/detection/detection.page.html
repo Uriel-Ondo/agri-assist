@@ -1,0 +1,82 @@
+<ion-header>
+  <ion-toolbar color="primary">
+    <ion-title>Détection des Maladies</ion-title>
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/home"></ion-back-button>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding">
+  <ion-grid>
+    <ion-row>
+      <ion-col size="12">
+        <h2 class="section-title">Analyser une plante</h2>
+        <p class="section-subtitle">
+          Prenez une photo ou téléchargez une image pour diagnostiquer une maladie.
+        </p>
+      </ion-col>
+    </ion-row>
+
+    <!-- Zone de prévisualisation de l'image -->
+    <ion-row>
+      <ion-col size="12" class="image-preview-container">
+        <ion-card class="image-card">
+          <img *ngIf="image" [src]="image" alt="Image sélectionnée" class="preview-image" />
+          <ion-icon *ngIf="!image" name="leaf-outline" class="placeholder-icon"></ion-icon>
+          <p *ngIf="!image" class="placeholder-text">Aucune image sélectionnée</p>
+        </ion-card>
+      </ion-col>
+    </ion-row>
+
+    <!-- Boutons d'action -->
+    <ion-row class="action-buttons">
+      <ion-col size="6">
+        <ion-button expand="block" color="success" (click)="takePicture()">
+          <ion-icon name="camera-outline" slot="start"></ion-icon>
+          Prendre une photo
+        </ion-button>
+      </ion-col>
+      <ion-col size="6">
+        <ion-button expand="block" color="secondary" (click)="fileInput.click()">
+          <ion-icon name="cloud-upload-outline" slot="start"></ion-icon>
+          Télécharger
+        </ion-button>
+        <input type="file" #fileInput hidden (change)="onFileChange($event)" accept="image/*" />
+      </ion-col>
+    </ion-row>
+
+    <!-- Bouton de détection -->
+    <ion-row>
+      <ion-col size="12">
+        <ion-button expand="block" color="primary" [disabled]="!file && !image" (click)="detect()">
+          <ion-icon name="search-outline" slot="start"></ion-icon>
+          Lancer la détection
+        </ion-button>
+      </ion-col>
+    </ion-row>
+
+    <!-- Résultat de la détection -->
+    <ion-row *ngIf="result">
+      <ion-col size="12">
+        <ion-card class="result-card">
+          <ion-card-header>
+            <ion-card-title>Résultat du diagnostic</ion-card-title>
+          </ion-card-header>
+          <ion-card-content>
+            <ion-item lines="none">
+              <ion-label>
+                <strong>Maladie détectée :</strong> {{ result.disease || 'Non identifiée' }}
+              </ion-label>
+            </ion-item>
+            <ion-item lines="none">
+              <ion-label class="recommendation">
+                <strong>Recommandation :</strong> {{ result.recommendation || 'Aucune recommandation disponible' }}
+              </ion-label>
+            </ion-item>
+          </ion-card-content>
+        </ion-card>
+      </ion-col>
+    </ion-row>
+  </ion-grid>
+</ion-content>

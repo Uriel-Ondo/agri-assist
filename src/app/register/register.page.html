@@ -1,0 +1,62 @@
+<ion-content class="ion-padding">
+  <div class="register-container">
+    <h1>Inscription</h1>
+    <form (ngSubmit)="register()" #registerForm="ngForm">
+      <ion-item lines="none" class="input-item">
+        <ion-input 
+          type="text" 
+          placeholder="Nom d'utilisateur" 
+          [(ngModel)]="username" 
+          name="username" 
+          required>
+        </ion-input>
+      </ion-item>
+      <ion-item lines="none" class="input-item">
+        <ion-input 
+          type="email" 
+          placeholder="Adresse email" 
+          [(ngModel)]="email" 
+          name="email" 
+          required 
+          email>
+        </ion-input>
+      </ion-item>
+      <ion-item lines="none" class="input-item">
+        <ion-input 
+          type="password" 
+          placeholder="Mot de passe" 
+          [(ngModel)]="password" 
+          name="password" 
+          required 
+          minlength="6">
+        </ion-input>
+      </ion-item>
+      <ion-item lines="none" class="input-item">
+        <ion-input 
+          type="password" 
+          placeholder="Confirmer le mot de passe" 
+          [(ngModel)]="confirmPassword" 
+          name="confirmPassword" 
+          required 
+          [pattern]="password">
+        </ion-input>
+      </ion-item>
+      <ion-item lines="none" class="input-item">
+        <ion-select 
+          placeholder="Choisissez votre rôle" 
+          [(ngModel)]="role" 
+          name="role" 
+          required>
+          <ion-select-option value="farmer">Agriculteur (Farmer)</ion-select-option>
+          <ion-select-option value="expert">Expert</ion-select-option>
+        </ion-select>
+      </ion-item>
+      <ion-button type="submit" expand="block" color="success" [disabled]="!registerForm.valid || password !== confirmPassword">
+        S'inscrire
+      </ion-button>
+    </form>
+    <div class="login-link">
+      <a (click)="goToLogin()">Vous avez déjà un compte ? Connectez-vous</a>
+    </div>
+  </div>
+</ion-content>

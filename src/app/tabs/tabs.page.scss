@@ -1,0 +1,88 @@
+// Variables de thème AgriAssist
+:root {
+    --agri-green: #4CAF50; // Vert startup (déjà utilisé dans votre CSS)
+    --agri-light-gray: #E0E0E0; // Gris clair pour les bordures
+    --agri-dark-gray: #757575; // Gris pour les icônes/labels non sélectionnés
+    --agri-white: #FFFFFF; // Blanc pour le fond
+    --agri-shadow: rgba(0, 0, 0, 0.1); // Ombre légère
+  }
+  
+  // Style de la barre d’onglets
+  ion-tab-bar {
+    --background: var(--agri-white);
+    --color: var(--agri-dark-gray);
+    --color-selected: var(--agri-green);
+    border-top: 1px solid var(--agri-light-gray);
+    box-shadow: 0 -2px 5px var(--agri-shadow); // Ombre subtile en haut
+    padding: 0; // Supprime tout padding par défaut
+    display: flex; // Assure une disposition flexible
+    justify-content: space-between; // Répartit les onglets uniformément
+    align-items: center;
+    height: 60px; // Hauteur fixe pour une meilleure consistance
+  }
+  
+  // Style des boutons d’onglets
+  ion-tab-button {
+    --ripple-color: var(--agri-green);
+    flex: 1; // Chaque bouton prend une part égale de l’espace
+    max-width: none; // Supprime toute contrainte de largeur maximale
+    padding: 0 5px; // Padding horizontal léger pour éviter un collage
+    transition: all 0.3s ease; // Animation fluide pour les changements
+  
+    ion-icon {
+      font-size: 24px; // Taille des icônes
+      margin-bottom: 2px; // Espace entre icône et label
+    }
+  
+    ion-label {
+      font-size: 12px; // Taille du texte pour éviter un débordement
+      font-family: 'Arial', sans-serif;
+      font-weight: 500;
+    }
+  
+    // Effet au survol (si applicable sur mobile)
+    &:hover {
+      --color: var(--agri-green);
+    }
+  
+    // Ajustement pour l’état sélectionné
+    &[aria-selected="true"] {
+      transform: scale(1.05); // Légère mise en avant de l’onglet actif
+    }
+  }
+  
+  // Ajustement pour éviter les tab-bars multiples (de global.scss)
+  ion-tab-bar:not(:first-of-type) {
+    display: none !important;
+  }
+  
+  // Ajustements responsives
+  @media (max-width: 576px) {
+    ion-tab-bar {
+      height: 50px; // Réduit la hauteur sur petits écrans
+    }
+  
+    ion-tab-button {
+      padding: 0 3px; // Réduit le padding sur petits écrans
+  
+      ion-icon {
+        font-size: 20px; // Réduit la taille des icônes
+      }
+  
+      ion-label {
+        font-size: 10px; // Réduit la taille du texte
+      }
+    }
+  }
+  
+  @media (min-width: 577px) and (max-width: 768px) {
+    ion-tab-button {
+      ion-icon {
+        font-size: 22px;
+      }
+  
+      ion-label {
+        font-size: 11px;
+      }
+    }
+  }

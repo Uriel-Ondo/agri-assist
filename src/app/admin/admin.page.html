@@ -1,0 +1,108 @@
+<ion-header>
+  <ion-toolbar color="primary">
+    <ion-title>Dashboard Admin</ion-title>
+    <ion-buttons slot="end">
+      <ion-button (click)="navigateTo('profile')">
+        <ion-icon name="person-circle-outline" slot="start"></ion-icon>
+        
+      </ion-button>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding">
+  <h1>Gestion des utilisateurs</h1>
+
+  <!-- Champ de recherche -->
+  <ion-item>
+    <ion-label position="floating">Rechercher par nom ou email</ion-label>
+    <ion-input [(ngModel)]="searchQuery" (ionInput)="filterUsers()"></ion-input>
+  </ion-item>
+
+  <!-- Liste des utilisateurs -->
+  <ion-list>
+    <ion-item *ngFor="let user of paginatedUsers">
+      <ion-label>{{ user.username }} ({{ user.email }}) - {{ user.role }} {{ user.is_admin ? '(Admin)' : '' }}</ion-label>
+      <ion-button slot="end" color="warning" (click)="editUser(user)">Modifier</ion-button>
+      <ion-button slot="end" color="danger" (click)="deleteUser(user.id)">Supprimer</ion-button>
+    </ion-item>
+  </ion-list>
+
+  <!-- Contrôles de pagination -->
+  <ion-row>
+    <ion-col size="6">
+      <ion-button expand="block" (click)="previousPage()" [disabled]="currentPage === 1">Précédent</ion-button>
+    </ion-col>
+    <ion-col size="6">
+      <ion-button expand="block" (click)="nextPage()" [disabled]="currentPage === totalPages">Suivant</ion-button>
+    </ion-col>
+  </ion-row>
+  <ion-text>Page {{ currentPage }} sur {{ totalPages }}</ion-text>
+
+  <!-- Bouton pour ajouter un utilisateur -->
+  <ion-button expand="block" (click)="addUser()" *ngIf="!isAdding && !isEditing">Ajouter un utilisateur</ion-button>
+
+  <!-- Formulaire pour ajouter un utilisateur -->
+  <ion-card *ngIf="isAdding">
+    <ion-card-header>
+      <ion-card-title>Ajouter un utilisateur</ion-card-title>
+    </ion-card-header>
+    <ion-card-content>
+      <ion-item>
+        <ion-label position="floating">Nom d'utilisateur</ion-label>
+        <ion-input [(ngModel)]="newUser.username"></ion-input>
+      </ion-item>
+      <ion-item>
+        <ion-label position="floating">Email</ion-label>
+        <ion-input [(ngModel)]="newUser.email" type="email"></ion-input>
+      </ion-item>
+      <ion-item>
+        <ion-label position="floating">Mot de passe</ion-label>
+        <ion-input [(ngModel)]="newUser.password" type="password"></ion-input>
+      </ion-item>
+      <ion-item>
+        <ion-label>Rôle</ion-label>
+        <ion-select [(ngModel)]="newUser.role">
+          <ion-select-option value="farmer">Farmer</ion-select-option>
+          <ion-select-option value="expert">Expert</ion-select-option>
+        </ion-select>
+      </ion-item>
+      <ion-item>
+        <ion-label>Administrateur</ion-label>
+        <ion-checkbox [(ngModel)]="newUser.is_admin"></ion-checkbox>
+      </ion-item>
+      <ion-button expand="block" (click)="saveNewUser()">Enregistrer</ion-button>
+      <ion-button expand="block" fill="outline" (click)="cancelAdd()">Annuler</ion-button>
+    </ion-card-content>
+  </ion-card>
+
+  <!-- Formulaire pour modifier un utilisateur -->
+  <ion-card *ngIf="isEditing">
+    <ion-card-header>
+      <ion-card-title>Modifier l'utilisateur</ion-card-title>
+    </ion-card-header>
+    <ion-card-content>
+      <ion-item>
+        <ion-label position="floating">Nom d'utilisateur</ion-label>
+        <ion-input [(ngModel)]="editedUser.username"></ion-input>
+      </ion-item>
+      <ion-item>
+        <ion-label position="floating">Email</ion-label>
+        <ion-input [(ngModel)]="editedUser.email" type="email"></ion-input>
+      </ion-item>
+      <ion-item>
+        <ion-label>Rôle</ion-label>
+        <ion-select [(ngModel)]="editedUser.role">
+          <ion-select-option value="farmer">Farmer</ion-select-option>
+          <ion-select-option value="expert">Expert</ion-select-option>
+        </ion-select>
+      </ion-item>
+      <ion-item>
+        <ion-label>Administrateur</ion-label>
+        <ion-checkbox [(ngModel)]="newUser.is_admin"></ion-checkbox>
+      </ion-item>
+      <ion-button expand="block" (click)="saveEditedUser()">Enregistrer</ion-button>
+      <ion-button expand="block" fill="outline" (click)="cancelEdit()">Annuler</ion-button>
+    </ion-card-content>
+  </ion-card>
+</ion-content>

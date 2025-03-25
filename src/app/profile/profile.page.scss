@@ -1,0 +1,142 @@
+// profile.page.scss
+
+ion-content {
+    --background: linear-gradient(135deg, #f5f7fa, #e4e7eb);
+  }
+  
+  // Carte de profil
+  .profile-card {
+    border-radius: 20px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+    background: rgba(255, 255, 255, 0.95);
+    margin: 20px;
+    transition: transform 0.3s ease;
+  
+    &:hover {
+      transform: translateY(-5px);
+    }
+  
+    .profile-header {
+      text-align: center;
+      padding-bottom: 0;
+  
+      .profile-avatar {
+        width: 100px;
+        height: 100px;
+        margin: 0 auto 15px;
+        border: 4px solid #ffffff;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        border-radius: 50%;
+        overflow: hidden;
+        transition: transform 0.3s ease;
+  
+        &:hover {
+          transform: scale(1.05);
+        }
+  
+        img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+      }
+  
+      ion-card-title {
+        font-size: 1.6rem;
+        font-weight: 700;
+        color: #333;
+      }
+  
+      ion-card-subtitle {
+        font-size: 1rem;
+        color: #888;
+        margin-top: 5px;
+        text-transform: capitalize;
+      }
+    }
+  
+    ion-card-content {
+      padding-top: 0;
+  
+      .profile-details {
+        ion-item {
+          --background: transparent;
+          --border-color: transparent;
+          margin-bottom: 10px;
+  
+          ion-icon {
+            font-size: 1.2rem;
+            color: #888;
+            margin-right: 10px;
+          }
+  
+          ion-label {
+            h3 {
+              font-size: 1rem;
+              font-weight: 600;
+              color: #555;
+            }
+  
+            p {
+              font-size: 1.1rem;
+              color: #333;
+            }
+          }
+        }
+  
+        ion-button {
+          --border-radius: 15px;
+          --box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+          margin-top: 20px;
+          font-weight: 500;
+        }
+      }
+  
+      .profile-edit {
+        ion-item {
+          --background: transparent;
+          --border-color: #ddd;
+          margin-bottom: 15px;
+          border-radius: 10px;
+  
+          ion-icon {
+            font-size: 1.2rem;
+            color: #888;
+            margin-right: 10px;
+          }
+  
+          ion-input {
+            --padding-start: 0;
+            font-size: 1.1rem;
+            color: #333;
+  
+            &::part(native) {
+              border: 1px solid #ddd;
+              border-radius: 8px;
+              padding: 8px;
+            }
+          }
+        }
+  
+        .edit-buttons {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+  
+          ion-button {
+            --border-radius: 15px;
+            --box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            font-weight: 500;
+          }
+        }
+      }
+  
+      // Bouton de déconnexion
+      ion-button[color="danger"] {
+        --border-radius: 15px;
+        --box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        margin-top: 20px;
+        font-weight: 500;
+      }
+    }
+  }

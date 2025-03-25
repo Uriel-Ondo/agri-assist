@@ -1,0 +1,80 @@
+<ion-header>
+  <ion-toolbar color="primary">
+    <ion-title>Profil</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding">
+  <ion-card class="profile-card">
+    <ion-card-header class="profile-header">
+      <ion-avatar class="profile-avatar">
+        <img src="https://ionicframework.com/docs/img/demos/avatar.svg" alt="Avatar" />
+      </ion-avatar>
+      <ion-card-title>{{ profile.username }}</ion-card-title>
+      <ion-card-subtitle>{{ profile.role | titlecase }}</ion-card-subtitle>
+    </ion-card-header>
+
+    <ion-card-content>
+      <!-- Mode affichage -->
+      <div *ngIf="!isEditing" class="profile-details">
+        <ion-item lines="none">
+          <ion-icon name="person-outline" slot="start"></ion-icon>
+          <ion-label>
+            <h3>Nom d'utilisateur</h3>
+            <p>{{ profile.username }}</p>
+          </ion-label>
+        </ion-item>
+        <ion-item lines="none">
+          <ion-icon name="mail-outline" slot="start"></ion-icon>
+          <ion-label>
+            <h3>E-mail</h3>
+            <p>{{ profile.email }}</p>
+          </ion-label>
+        </ion-item>
+        <ion-button expand="block" color="primary" (click)="toggleEdit()">
+          Modifier le profil
+        </ion-button>
+        <!-- Bouton Dashboard visible uniquement pour les admins -->
+        <ion-button *ngIf="profile.is_admin" expand="block" color="tertiary" (click)="goToDashboard()">
+          Dashboard Admin
+        </ion-button>
+      </div>
+
+      <!-- Mode modification -->
+      <div *ngIf="isEditing" class="profile-edit">
+        <ion-item>
+          <ion-icon name="person-outline" slot="start"></ion-icon>
+          <ion-input
+            label="Nom d'utilisateur"
+            labelPlacement="floating"
+            [(ngModel)]="updatedProfile.username"
+            placeholder="Entrez votre nom d'utilisateur"
+          ></ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-icon name="mail-outline" slot="start"></ion-icon>
+          <ion-input
+            label="E-mail"
+            labelPlacement="floating"
+            [(ngModel)]="updatedProfile.email"
+            placeholder="Entrez votre e-mail"
+            type="email"
+          ></ion-input>
+        </ion-item>
+        <div class="edit-buttons">
+          <ion-button expand="block" color="primary" (click)="saveProfile()">
+            Enregistrer
+          </ion-button>
+          <ion-button expand="block" color="medium" fill="outline" (click)="toggleEdit()">
+            Annuler
+          </ion-button>
+        </div>
+      </div>
+
+      <!-- Bouton de déconnexion -->
+      <ion-button expand="block" color="danger" (click)="logout()">
+        Se déconnecter
+      </ion-button>
+    </ion-card-content>
+  </ion-card>
+</ion-content>

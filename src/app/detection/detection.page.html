@@ -64,14 +64,31 @@
             <ion-card-title>Résultat du diagnostic</ion-card-title>
           </ion-card-header>
           <ion-card-content>
+            <!-- Maladie détectée -->
             <ion-item lines="none">
               <ion-label>
-                <strong>Maladie détectée :</strong> {{ result.disease || 'Non identifiée' }}
+                <strong>Maladie détectée :</strong>
+                <span [ngClass]="{'healthy-text': result.disease.includes('healthy')}">
+                  {{ formatDiseaseName(result.disease) || 'Non identifiée' }}
+                </span>
               </ion-label>
             </ion-item>
+
+            <!-- Confiance -->
+            <ion-item lines="none" *ngIf="result.confidence">
+              <ion-label>
+                <strong>Confiance :</strong>
+                <span [ngClass]="{'high-confidence': result.confidence >= 0.8, 'low-confidence': result.confidence < 0.8}">
+                  {{ result.confidence * 100 | number:'1.0-2' }}%
+                </span>
+              </ion-label>
+            </ion-item>
+
+            <!-- Recommandation -->
             <ion-item lines="none">
               <ion-label class="recommendation">
-                <strong>Recommandation :</strong> {{ result.recommendation || 'Aucune recommandation disponible' }}
+                <strong>Recommandation :</strong>
+                {{ result.recommendation || 'Aucune recommandation disponible' }}
               </ion-label>
             </ion-item>
           </ion-card-content>

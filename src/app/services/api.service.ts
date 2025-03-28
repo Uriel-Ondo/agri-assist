@@ -27,6 +27,13 @@ export interface Session {
   created_at: string;
 }
 
+export interface PlantDetectionResponse {
+  disease: string;
+  recommendation: string;
+  image_path: string;
+  confidence?: number;  // Ajouté
+}
+
 export interface SessionMessage {
   id: number;
   sender_username: string;
@@ -300,16 +307,15 @@ export class ApiService {
     ).pipe(catchError(this.handleError));
   }
 
-detectPlantDisease(file: File): Observable<any> {
-  const formData = new FormData();
-  formData.append('image', file); // Changement de 'file' à 'image'
-  return this.http.post(
-    `${this.baseUrl}/plant/detect`,
-    formData,
-    { headers: new HttpHeaders({ 'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}` }) }
-  ).pipe(catchError(this.handleError));
-}
-
+  detectPlantDisease(file: File): Observable<PlantDetectionResponse> {
+    const formData = new FormData();
+    formData.append('image', file);
+    return this.http.post<PlantDetectionResponse>(
+      `${this.baseUrl}/plant/detect`,
+      formData,
+      { headers: new HttpHeaders({ 'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}` }) }
+    ).pipe(catchError(this.handleError));
+  }
 
   getWeather(city: string = 'Dakar'): Observable<WeatherResponse> {
     const url = `${this.baseUrl}/weather/local`;

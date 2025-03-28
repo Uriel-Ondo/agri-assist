@@ -48,10 +48,12 @@ export class DetectionPage implements OnInit {
       reader.readAsDataURL(this.file);
     }
   }
+
   detect() {
     if (this.file) {
       this.apiService.detectPlantDisease(this.file).subscribe({
         next: (response: any) => {
+          console.log('Résultat de la détection reçu :', response);
           this.result = response;
         },
         error: (error: any) => {
@@ -61,5 +63,14 @@ export class DetectionPage implements OnInit {
     } else {
       console.error('Aucun fichier sélectionné pour la détection.');
     }
+  }
+
+  // Formater le nom de la maladie pour un affichage plus lisible
+  formatDiseaseName(disease: string): string {
+    if (!disease || disease === 'Inconnue') return disease;
+    return disease
+      .replace('___', ' - ')  // Remplace les "___" par un tiret
+      .replace(/_/g, ' ')     // Remplace les "_" restants par des espaces
+      .replace(/\b\w/g, char => char.toUpperCase());  // Met la première lettre de chaque mot en majuscule
   }
 }

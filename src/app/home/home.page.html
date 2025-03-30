@@ -1,52 +1,15 @@
 <ion-header>
   <ion-toolbar color="primary">
-    <ion-title>Home</ion-title>
+    <ion-title>Accueil</ion-title>
   </ion-toolbar>
 </ion-header>
 
 <ion-content class="ion-padding">
-  <ion-card (click)="navigateTo('live')">
-    <ion-card-header>
-      <ion-card-title>Live</ion-card-title>
-    </ion-card-header>
-    <ion-card-content>
-      Accéder à la section LIVE
-    </ion-card-content>
-  </ion-card>
-
-  <ion-card (click)="navigateTo('chatbot')">
-    <ion-card-header>
-      <ion-card-title>Chatbot</ion-card-title>
-    </ion-card-header>
-    <ion-card-content>
-      Parler avec le Chatbot
-    </ion-card-content>
-  </ion-card>
-
-  <ion-card (click)="navigateTo('detection')">
-    <ion-card-header>
-      <ion-card-title>Détection</ion-card-title>
-    </ion-card-header>
-    <ion-card-content>
-      Détection des maladies des plantes
-    </ion-card-content>
-  </ion-card>
-
-  <ion-card (click)="navigateTo('experts')">
-    <ion-card-header>
-      <ion-card-title>Experts</ion-card-title>
-    </ion-card-header>
-    <ion-card-content>
-      Consulter un expert
-    </ion-card-content>
-  </ion-card>
-
-  <ion-card (click)="navigateTo('weather')">
-    <ion-card-header>
-      <ion-card-title>Météo</ion-card-title>
-    </ion-card-header>
-    <ion-card-content>
-      Vérifier la météo
-    </ion-card-content>
-  </ion-card>
+  <div class="app-grid">
+    <div *ngFor="let section of sections" class="app-item" [ngClass]="section.route" (click)="navigateTo(section.route)">
+      <ion-icon [name]="section.icon" class="app-icon"></ion-icon>
+      <h3>{{ section.title }}</h3>
+      <p>{{ section.description }}</p>
+    </div>
+  </div>
 </ion-content>

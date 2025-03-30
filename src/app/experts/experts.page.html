@@ -6,16 +6,10 @@
       </ion-button>
     </ion-buttons>
     <ion-title>{{ currentSession ? (currentSession.farmerUsername + ' - ' + currentSession.expertUsername) : 'Experts' }}</ion-title>
-    <ion-buttons slot="end">
-      <ion-button (click)="refreshMessages()" *ngIf="currentSession">
-        <ion-icon name="refresh"></ion-icon>
-      </ion-button>
-    </ion-buttons>
   </ion-toolbar>
 </ion-header>
 
 <ion-content class="ion-padding chat-container">
-  <!-- Vue sans session (liste des demandes/sessions) -->
   <div *ngIf="!currentSession">
     <div *ngIf="userRole === 'farmer'" class="farmer-view">
       <ion-card class="request-form">
@@ -59,16 +53,16 @@
     <div *ngIf="userRole === 'expert'" class="expert-view">
       <ion-list class="sessions-list">
         <ion-list-header>Demandes en attente</ion-list-header>
-        <ion-item *ngFor="let message of messages" button [disabled]="message.responded" (click)="handleMessageClick(message)">
+        <ion-item *ngFor="let session of messages" button [disabled]="session.responded" (click)="handleMessageClick(session)">
           <ion-avatar slot="start">
-            <ion-img [src]="message.request_type === 'image' ? message.content : '/assets/default-avatar.png'"></ion-img>
+            <ion-img [src]="session.request_type === 'image' ? session.content : '/assets/default-avatar.png'"></ion-img>
           </ion-avatar>
           <ion-label>
-            <h2>{{ message.content }}</h2>
-            <p>{{ message.username }} - {{ message.created_at | date:'short' }}</p>
+            <h2>{{ session.content }}</h2>
+            <p>{{ session.username }} - {{ session.created_at | date:'short' }}</p>
           </ion-label>
-          <ion-button slot="end" [disabled]="message.responded" color="primary">
-            {{ message.responded ? 'Chat' : 'Répondre' }}
+          <ion-button slot="end" [disabled]="session.responded" color="primary">
+            {{ session.responded ? 'Chat' : 'Répondre' }}
           </ion-button>
         </ion-item>
       </ion-list>
@@ -88,16 +82,18 @@
     </div>
   </div>
 
-  <!-- Vue de la session (chat) -->
   <div *ngIf="currentSession" class="chat-view">
     <ion-toolbar color="light" class="chat-header">
       <ion-title>{{ currentSession.farmerUsername }} - {{ currentSession.expertUsername }}</ion-title>
       <ion-buttons slot="end">
-        <ion-button (click)="startCall('video')" color="success">
+        <ion-button (click)="startCall('video')" color="success" [disabled]="userRole === 'farmer' && isSessionEnded">
           <ion-icon name="videocam"></ion-icon>
         </ion-button>
-        <ion-button (click)="startCall('audio')" color="success">
+        <ion-button (click)="startCall('audio')" color="success" [disabled]="userRole === 'farmer' && isSessionEnded">
           <ion-icon name="call"></ion-icon>
+        </ion-button>
+        <ion-button *ngIf="userRole === 'expert'" (click)="endSession()" color="warning">
+          <ion-icon name="stop"></ion-icon> Terminer
         </ion-button>
         <ion-button (click)="deleteSession()" color="danger">
           <ion-icon name="trash"></ion-icon>
@@ -110,22 +106,33 @@
         <div class="message-content">
           <p *ngIf="msg.message_type === 'text'">{{ msg.content }}</p>
           <img *ngIf="msg.message_type === 'image'" [src]="msg.content" alt="Image" class="message-image" />
-          <video *ngIf="msg.message_type === 'video'" controls [src]="msg.content" class="message-video"></video>
-          <audio *ngIf="msg.message_type === 'audio'" controls [src]="msg.content"></audio>
-          <p *ngIf="msg.message_type === 'audio_call' || msg.message_type === 'video_call'">{{ msg.content }}</p>
-          <span class="timestamp">{{ msg.created_at | date:'shortTime' }}</span>
+          <video *ngIf="msg.message_type === 'video' && msg.content.startsWith('http')" controls [src]="msg.content" class="message-video"></video>
+          <audio *ngIf="msg.message_type === 'audio' && msg.content.startsWith('http')" controls [src]="msg.content" class="message-audio"></audio>
+          <p *ngIf="msg.message_type === 'audio_call' || msg.message_type === 'video_call'" class="call-message">{{ msg.content }}</p>
+          <p *ngIf="msg.message_type === 'session_ended'" class="system-message">{{ msg.content }}</p>
+          <div class="message-footer">
+            <span class="timestamp">{{ msg.created_at | date:'shortTime' }}</span>
+            <div class="message-status" *ngIf="msg.sender_username === profile?.username">
+              <span class="tick" *ngIf="msg.status === 'sent'">✓</span>
+              <span class="tick" *ngIf="msg.status === 'received'">✓✓</span>
+              <span class="tick read" *ngIf="msg.status === 'read'">✓✓</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
-    <ion-footer class="message-input">
-      <ion-item lines="none">
+    <ion-footer class="message-input" *ngIf="currentSession">
+      <ion-item lines="none" *ngIf="userRole === 'farmer' && isSessionEnded">
+        <ion-label>Cette session est terminée. Vous ne pouvez plus envoyer de messages.</ion-label>
+      </ion-item>
+      <ion-item lines="none" *ngIf="!(userRole === 'farmer' && isSessionEnded)">
         <ion-textarea [(ngModel)]="messageContent" placeholder="Tapez un message..." auto-grow="true"></ion-textarea>
         <ion-button slot="end" fill="clear" (click)="sendMessage('text')">
           <ion-icon name="send" color="primary"></ion-icon>
         </ion-button>
       </ion-item>
-      <ion-item lines="none">
+      <ion-item lines="none" *ngIf="!(userRole === 'farmer' && isSessionEnded)">
         <ion-button (click)="toggleRecording()" [color]="isRecording ? 'danger' : 'primary'">
           <ion-icon [name]="isRecording ? 'stop' : 'mic'"></ion-icon>
         </ion-button>

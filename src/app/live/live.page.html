@@ -3,36 +3,34 @@
   <ion-toolbar color="primary" class="header-toolbar">
     <ion-title>Émission en Direct</ion-title>
     <ion-buttons slot="end">
-      <ion-button color="light">
+      <ion-button color="light" class="viewers-btn">
         <ion-icon name="people-outline" slot="icon-only"></ion-icon>
       </ion-button>
     </ion-buttons>
   </ion-toolbar>
 </ion-header>
 
-<ion-content class="ion-padding">
+<ion-content class="ion-padding live-content">
   <!-- Sélecteur de chaînes -->
   <ion-item class="channel-selector">
     <ion-label>Choisir une chaîne</ion-label>
-    <ion-select [(ngModel)]="selectedChannel" (ionChange)="changeChannel()">
-      <ion-select-option value="france2">EURONEWS</ion-select-option>
-      <ion-select-option value="tf1">France24</ion-select-option>
-      <ion-select-option value="m6">M6</ion-select-option>
+    <ion-select [(ngModel)]="selectedChannel" (ionChange)="changeChannel()" interface="popover">
+      <ion-select-option value="tv5monde">TV5MONDE</ion-select-option>
+      <ion-select-option value="info6">INFO6</ion-select-option>
+      <ion-select-option value="france24">France24</ion-select-option>
+      <ion-select-option value="animesama">AnimeSama</ion-select-option>
+      <ion-select-option value="tvanime">TVAnime</ion-select-option>
     </ion-select>
   </ion-item>
 
   <!-- Section Vidéo -->
   <ion-card class="video-card">
     <ion-card-content>
-      <!-- Indicateur de chargement -->
       <ion-spinner *ngIf="isLoading" name="crescent" class="video-spinner"></ion-spinner>
-      <!-- Message d'erreur -->
-      <div *ngIf="videoError" class="video-error">
-        <p>Erreur lors du chargement de la vidéo. Veuillez réessayer.</p>
-      </div>
-      <!-- Objet HbbTV pour la diffusion TNT -->
+       <!--<div *ngIf="videoError" class="video-error">
+       <p>Erreur lors du chargement de la vidéo. Veuillez réessayer.</p> 
+      </div> -->
       <object id="broadcast-video" type="video/broadcast" class="live-video"></object>
-      <!-- Lecteur HLS de secours -->
       <video id="hls-video" class="live-video" controls style="display: none;"></video>
     </ion-card-content>
   </ion-card>
@@ -62,14 +60,14 @@
         </ion-item>
       </ion-list>
 
-      <!-- Formulaire d'envoi -->
       <ion-item class="comment-input">
         <ion-input
           [(ngModel)]="newComment"
           placeholder="Écrire un commentaire..."
           (keyup.enter)="sendComment()"
+          class="comment-input-field"
         ></ion-input>
-        <ion-button slot="end" color="primary" (click)="sendComment()">
+        <ion-button slot="end" color="primary" (click)="sendComment()" class="send-btn">
           <ion-icon name="leaf-outline" slot="icon-only"></ion-icon>
         </ion-button>
       </ion-item>

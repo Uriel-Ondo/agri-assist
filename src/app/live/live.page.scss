@@ -1,236 +1,302 @@
-// Styles globaux
-ion-content {
-    --background: linear-gradient(135deg, #c8e6c9, #fff8e1);
-    --background-size: cover;
-    --background-position: center;
-  }
-  
-  // Header
-  .header-toolbar {
-    --background: linear-gradient(135deg, #2e7d32, #4caf50);
-    --color: #ffffff;
-    padding: 0 10px;
-  
-    ion-title {
-      font-size: 1.3rem;
-      font-weight: 700;
-      letter-spacing: 0.5px;
-      font-family: 'Poppins', sans-serif;
-    }
-  
-    ion-buttons {
-      ion-button {
-        --border-radius: 50%;
-        width: 36px;
-        height: 36px;
-        --background: rgba(255, 255, 255, 0.2);
-        --color: #ffffff;
-  
-        ion-icon {
-          font-size: 1.2rem;
-        }
-      }
-    }
-  }
-  
+// Variables globales
+$primary-gradient: linear-gradient(135deg, #2e7d32 0%, #4caf50 100%); // Dégradé vert
+$background-gradient: linear-gradient(135deg, #e8f5e9 0%, #f5f5f5 100%); // Fond doux
+$shadow: 0 6px 20px rgba(0, 0, 0, 0.1); // Ombre prononcée
+$hover-shadow: 0 8px 25px rgba(0, 0, 0, 0.15); // Ombre au survol
+$neon-glow: 0 0 10px rgba(76, 175, 80, 0.5); // Effet néon
+$transition: all 0.3s ease-in-out; // Transition fluide
+
+// Contenu principal
+ion-content.live-content {
+  --background: $background-gradient;
+  padding: 20px;
+
   // Sélecteur de chaînes
   .channel-selector {
-    margin: 16px 0;
-    --background: #f5f5f5;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  
+    margin: 20px 0;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 12px;
+    box-shadow: $shadow;
+    transition: $transition;
+    border: 1px solid #dcedc8;
+
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: $hover-shadow;
+    }
+
     ion-label {
-      font-size: 1rem;
+      font-size: 1.1rem;
       font-weight: 600;
       color: #2e7d32;
       font-family: 'Poppins', sans-serif;
+      padding-left: 12px;
     }
-  
+
     ion-select {
       --padding-start: 12px;
       --padding-end: 12px;
-      font-size: 0.9rem;
+      font-size: 1rem;
       color: #5d4037;
       font-family: 'Roboto', sans-serif;
+      background: transparent;
     }
   }
-  
+
   // Carte Vidéo
   .video-card {
-    margin: 0 0 16px 0;
-    border-radius: 12px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
-    overflow: hidden;
+    margin: 0 0 20px 0;
+    border-radius: 16px;
+    box-shadow: $shadow;
     background: #ffffff;
+    overflow: hidden;
     position: relative;
-  
+    transition: $transition;
+
+    &:hover {
+      box-shadow: $hover-shadow;
+    }
+
     .video-spinner {
       position: absolute;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
       --color: #4caf50;
+      font-size: 2rem;
     }
-  
+
     .video-error {
       text-align: center;
-      padding: 16px;
+      padding: 20px;
       color: #d32f2f;
       font-family: 'Roboto', sans-serif;
+      font-size: 1rem;
+      background: rgba(211, 47, 47, 0.1);
+      border-radius: 8px;
+      margin: 10px;
     }
-  
+
     .live-video {
       width: 100%;
       height: auto;
-      max-height: 50vh;
+      max-height: 60vh;
       background: #000;
-      border-radius: 12px 12px 0 0;
+      border-radius: 16px 16px 0 0;
+      object-fit: cover;
     }
   }
-  
+
   // Carte Commentaires
   .comments-card {
-    margin: 0;
-    border-radius: 12px;
-    background: #fffdf7;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+    border-radius: 16px;
+    background: rgba(255, 253, 247, 0.95);
+    box-shadow: $shadow;
     border: 1px solid #dcedc8;
-  
+    transition: $transition;
+
+    &:hover {
+      box-shadow: $hover-shadow;
+    }
+
     ion-card-header {
-      background: #f5f5f5;
-      border-bottom: 1px solid #dcedc8;
-      padding: 12px 16px;
-  
+      background: $primary-gradient;
+      padding: 15px 20px;
+      border-bottom: none;
+
       ion-card-title {
-        font-size: 1.2rem;
-        font-weight: 600;
-        color: #2e7d32;
+        font-size: 1.3rem;
+        font-weight: 700;
+        color: #ffffff;
         font-family: 'Poppins', sans-serif;
       }
     }
-  
+
     ion-card-content {
-      padding: 16px;
+      padding: 20px;
     }
-  
+
     .comments-list {
-      max-height: 350px;
+      max-height: 400px;
       overflow-y: auto;
       padding: 10px 0;
-      display: flex;
-      flex-direction: column;
-  
+
       .comment-item {
         --background: transparent;
         --border-width: 0;
-        margin-bottom: 12px;
-        padding: 0; // Supprimer le padding par défaut
-  
+        margin-bottom: 15px;
+
         .comment-bubble {
           background: #e8f5e9;
-          border-radius: 8px;
-          padding: 12px;
-          margin: 0 8px;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-          border-left: 4px solid #4caf50;
-          transition: transform 0.2s ease;
-          display: flex;
-          flex-direction: column; // Assurer que le contenu est bien empilé
-          min-height: 60px; // Hauteur minimale pour éviter le chevauchement
-  
+          border-radius: 12px;
+          padding: 15px;
+          box-shadow: $shadow;
+          border-left: 5px solid #4caf50;
+          transition: $transition;
+          position: relative;
+
           &:hover {
-            transform: translateY(-2px);
+            transform: translateY(-3px);
+            box-shadow: $hover-shadow;
+            &::before {
+              opacity: 1;
+            }
           }
-  
+
+          &::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 12px;
+            box-shadow: $neon-glow;
+            opacity: 0;
+            transition: $transition;
+          }
+
           .comment-header {
             display: flex;
             align-items: center;
-            margin-bottom: 8px;
-  
+            margin-bottom: 10px;
+
             ion-avatar {
-              width: 36px;
-              height: 36px;
-              margin-right: 12px;
-  
+              width: 40px;
+              height: 40px;
+              margin-right: 15px;
+
               img {
                 border-radius: 50%;
-                object-fit: cover;
                 border: 2px solid #a5d6a7;
+                transition: $transition;
+                &:hover {
+                  transform: scale(1.1);
+                }
               }
             }
-  
+
             .comment-meta {
               display: flex;
-              align-items: center;
-              flex: 1;
-  
+              flex-direction: column;
+
               .comment-username {
                 font-size: 1rem;
                 font-weight: 600;
                 color: #3f5e3b;
-                margin-right: 8px;
                 font-family: 'Roboto', sans-serif;
               }
-  
+
               .comment-time {
-                font-size: 0.75rem;
+                font-size: 0.8rem;
                 color: #8d6e63;
                 font-style: italic;
               }
             }
           }
-  
+
           .comment-content {
             background: #ffffff;
-            border-radius: 6px;
-            padding: 8px;
+            border-radius: 8px;
+            padding: 10px;
             border: 1px solid #dcedc8;
-            flex: 1; // S'assurer que le contenu prend l'espace nécessaire
-  
+
             p {
-              font-size: 0.9rem;
+              font-size: 0.95rem;
               color: #5d4037;
               margin: 0;
-              word-break: break-word;
               font-family: 'Roboto', sans-serif;
-              line-height: 1.4;
-              min-height: 20px; // Hauteur minimale pour éviter que le contenu soit vide
+              line-height: 1.5;
             }
           }
         }
       }
     }
-  
+
     .comment-input {
-      --background: #f5f5f5;
-      border-radius: 8px;
-      margin-top: 16px;
-      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+      background: rgba(245, 245, 245, 0.9);
+      border-radius: 12px;
+      margin-top: 20px;
+      box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.05);
       border: 1px solid #dcedc8;
-  
-      ion-input {
-        --padding-start: 12px;
-        --padding-end: 12px;
-        font-size: 0.9rem;
+      transition: $transition;
+
+      &:hover {
+        box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.1);
+      }
+
+      .comment-input-field {
+        --padding-start: 15px;
+        --padding-end: 15px;
+        font-size: 1rem;
         color: #5d4037;
         --placeholder-color: #a1887f;
         font-family: 'Roboto', sans-serif;
       }
-  
-      ion-button {
-        --border-radius: 8px;
-        --padding-start: 16px;
-        --padding-end: 16px;
-        height: 36px;
-        margin: 0 8px;
+
+      .send-btn {
+        --border-radius: 10px;
+        --padding-start: 20px;
+        --padding-end: 20px;
+        height: 40px;
+        margin: 0 10px;
         --background: #4caf50;
         --background-activated: #388e3c;
         --color: #ffffff;
-  
+        box-shadow: $shadow;
+        transition: $transition;
+
+        &:hover {
+          --background: #66bb6a;
+          box-shadow: $hover-shadow;
+          ion-icon {
+            animation: bounce 0.5s ease infinite;
+          }
+        }
+
         ion-icon {
-          font-size: 1.2rem;
+          font-size: 1.3rem;
         }
       }
     }
   }
+}
+
+// Header
+.header-toolbar {
+  --background: $primary-gradient;
+  --color: #ffffff;
+  padding: 0 15px;
+  box-shadow: $shadow;
+
+  ion-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    font-family: 'Poppins', sans-serif;
+  }
+
+  .viewers-btn {
+    --border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    --background: rgba(255, 255, 255, 0.3);
+    --color: #ffffff;
+    transition: $transition;
+
+    &:hover {
+      --background: rgba(255, 255, 255, 0.5);
+      transform: scale(1.1);
+    }
+
+    ion-icon {
+      font-size: 1.4rem;
+    }
+  }
+}
+
+// Animation de rebond
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}

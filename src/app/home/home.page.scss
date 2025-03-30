@@ -1,78 +1,135 @@
-// Variables globales pour une cohérence visuelle
-$primary-color: #4CAF50; // Bleu Ionic par défaut
-$secondary-color: #4CAF50; // Bleu plus clair pour les effets
-$card-bg: #ffffff; // Fond des cartes
-$shadow: 0 4px 8px rgba(0, 0, 0, 0.1); // Ombre légère
-$hover-shadow: 0 6px 12px rgba(0, 0, 0, 0.15); // Ombre au survol
-$transition: all 0.3s ease; // Transition fluide
+// Variables globales
+$primary-color: #4CAF50; // Vert principal
+$secondary-color: #81C784; // Vert clair
+$background-gradient: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); // Dégradé doux
+$icon-size: 50px; // Taille légèrement augmentée
+$shadow: 0 6px 14px rgba(0, 0, 0, 0.1); // Ombre plus prononcée
+$hover-shadow: 0 8px 20px rgba(0, 0, 0, 0.15); // Ombre au survol
+$transition: all 0.3s ease-in-out; // Transition plus fluide
+$neon-glow: 0 0 10px rgba(76, 175, 80, 0.5); // Effet néon optionnel
 
 // Style pour l’en-tête
 ion-header {
   ion-toolbar {
     --background: $primary-color;
     --color: white;
+    box-shadow: $shadow; // Ombre sous la barre
 
     ion-title {
-      font-size: 1.5rem;
-      font-weight: 600;
+      font-size: 1.6rem;
+      font-weight: 700;
+      font-family: 'Poppins', sans-serif; // Typographie moderne (ajoutez via Google Fonts si besoin)
       text-align: center;
-      padding: 10px 0;
+      padding: 12px 0;
+      letter-spacing: 0.5px;
     }
   }
 }
 
 // Style pour le contenu principal
 ion-content {
-  --background: #f4f5f8; // Fond gris clair pour contraste
+  --background: $background-gradient; // Fond dégradé
 
   .ion-padding {
-    padding: 16px; // Espacement interne par défaut d’Ionic
+    padding: 25px; // Plus d'espace
   }
 
-  // Grille pour aligner les cartes
-  .card-grid {
+  // Grille pour les icônes
+  .app-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); // Grille responsive
-    gap: 16px; // Espacement entre les cartes
-    margin-top: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); // Items légèrement plus grands
+    gap: 25px; // Espacement accru
+    justify-items: center;
   }
 
-  // Style pour chaque carte
-  ion-card {
-    background: $card-bg;
-    border-radius: 12px;
+  // Style pour chaque item
+  .app-item {
+    background: rgba(255, 255, 255, 0.95); // Fond blanc avec légère transparence
+    border-radius: 20px; // Coins plus arrondis
     box-shadow: $shadow;
+    width: 130px;
+    height: 160px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 15px;
     transition: $transition;
-    cursor: pointer; // Indique que la carte est cliquable
-    overflow: hidden; // Évite les débordements
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+
+    // Effet néon sur les bords (optionnel)
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      border-radius: 20px;
+      box-shadow: $neon-glow;
+      opacity: 0;
+      transition: $transition;
+    }
 
     &:hover {
-      transform: translateY(-5px); // Légère élévation au survol
+      transform: translateY(-5px) scale(1.05); // Combinaison élévation + zoom
       box-shadow: $hover-shadow;
-      ion-card-header {
-        background: $secondary-color;
+      background: $secondary-color;
+      color: white;
+
+      &::before {
+        opacity: 1; // Active l'effet néon au survol
+      }
+
+      ion-icon {
+        color: white;
+        animation: bounce 0.5s ease infinite; // Animation de rebond
+      }
+
+      h3, p {
         color: white;
       }
     }
 
-    ion-card-header {
-      padding: 16px;
-      background: $primary-color;
-      color: white;
+    // Icône stylée
+    .app-icon {
+      font-size: $icon-size;
+      margin-bottom: 12px;
       transition: $transition;
-
-      ion-card-title {
-        font-size: 1.2rem;
-        font-weight: 500;
-        text-align: center;
-      }
     }
 
-    ion-card-content {
-      padding: 16px;
-      font-size: 1rem;
-      color: #333; // Texte sombre pour lisibilité
-      text-align: center;
+    // Titre
+    h3 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      font-family: 'Poppins', sans-serif;
+      margin: 0;
+      color: #222;
     }
+
+    // Description
+    p {
+      font-size: 0.85rem;
+      font-family: 'Roboto', sans-serif; // Typographie secondaire
+      color: #555;
+      margin: 5px 0 0;
+    }
+
+    // Couleurs spécifiques par section
+    &.live .app-icon { color: #e91e63; } // Rose pour Live
+    &.chatbot .app-icon { color: #2196f3; } // Bleu pour AgriBot
+    &.detection .app-icon { color: #4CAF50; } // Vert pour Détection
+    &.experts .app-icon { color: #ff9800; } // Orange pour Experts
+    &.weather .app-icon { color: #03a9f4; } // Bleu clair pour Météo
+    &.profile .app-icon { color: #9c27b0; } // Violet pour Profil
   }
+}
+
+// Animation de rebond pour les icônes
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
 }

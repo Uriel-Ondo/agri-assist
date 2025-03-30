@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpErrorResponse } from '@angular/common/http';
-import { Observable, throwError, forkJoin } from 'rxjs';
-import { catchError, tap, switchMap } from 'rxjs/operators';
+import { Observable, throwError } from 'rxjs';
+import { catchError, tap } from 'rxjs/operators';
 
 // Interfaces pour typage des réponses
 export interface ChatResponse {
@@ -20,6 +20,7 @@ export interface PublicRequest {
 }
 
 export interface Session {
+  session_id: number;  // Déjà ajouté comme demandé
   farmer_username: string;
   expert_username: string;
   request_id: number | null;
@@ -31,15 +32,17 @@ export interface PlantDetectionResponse {
   disease: string;
   recommendation: string;
   image_path: string;
-  confidence?: number;  // Ajouté
+  confidence?: number;
 }
 
 export interface SessionMessage {
   id: number;
+  session_id: number;
   sender_username: string;
   message_type: string;
   content: string;
   created_at: string;
+  status?: 'sent' | 'received' | 'read'; // Ajout de la propriété status (optionnelle)
 }
 
 export interface ChatMessage {
@@ -81,7 +84,7 @@ export interface ProfileResponse {
   email: string;
   role: string;
   id?: string;
-  is_admin?: boolean; // Ajouté pour refléter si l'utilisateur est admin
+  is_admin?: boolean;
 }
 
 @Injectable({
@@ -94,6 +97,7 @@ export class ApiService {
 
   private getHeaders(): HttpHeaders {
     const token = localStorage.getItem('access_token');
+    console.log('Token envoyé dans les headers:', token);
     let headers = new HttpHeaders({
       'Accept': 'application/json'
     });
@@ -104,27 +108,46 @@ export class ApiService {
   }
 
   private handleError(error: HttpErrorResponse): Observable<never> {
-    if (error.status === 401) {
-      this.logout();
-      return throwError(() => new Error('Session expirée, veuillez vous reconnecter.'));
-    } else if (error.status === 400) {
-      return throwError(() => new Error(error.error?.message || 'Requête invalide.'));
-    } else if (error.status === 500) {
-      return throwError(() => new Error('Erreur serveur, veuillez réessayer plus tard.'));
+    let errorMessage = 'Une erreur est survenue, veuillez réessayer.';
+    if (error.error instanceof ErrorEvent) {
+      errorMessage = `Erreur réseau : ${error.error.message}`;
+    } else {
+      switch (error.status) {
+        case 400:
+          errorMessage = error.error?.message || 'Requête invalide.';
+          break;
+        case 401:
+          errorMessage = 'Session expirée, veuillez vous reconnecter.';
+          this.logout();
+          break;
+        case 403:
+          errorMessage = error.error?.message || 'Accès refusé : vous n’avez pas les permissions nécessaires.';
+          break;
+        case 404:
+          errorMessage = error.error?.message || 'Ressource non trouvée.';
+          break;
+        case 500:
+          errorMessage = 'Erreur serveur, veuillez réessayer plus tard.';
+          break;
+        default:
+          errorMessage = error.error?.message || 'Erreur inattendue.';
+      }
     }
-    return throwError(() => new Error('Une erreur est survenue, veuillez réessayer.'));
+    return throwError(() => new Error(errorMessage));
   }
 
-  login(email: string, password: string): Observable<{ access_token: string; role: string; user_id: string }> {
-    return this.http.post<{ access_token: string; role: string; user_id: string }>(
+  login(email: string, password: string): Observable<{ access_token: string; role: string; user: { id: number; username: string } }> {
+    return this.http.post<{ access_token: string; role: string; user: { id: number; username: string } }>(
       `${this.baseUrl}/auth/login`,
       { email, password },
       { headers: this.getHeaders() }
     ).pipe(
       tap(response => {
+        console.log('Réponse login:', response);
         localStorage.setItem('access_token', response.access_token);
         localStorage.setItem('role', response.role);
-        localStorage.setItem('user_id', response.user_id);
+        localStorage.setItem('user_id', response.user.id.toString());
+        console.log('user_id stocké:', response.user.id);
       }),
       catchError(this.handleError)
     );
@@ -133,7 +156,7 @@ export class ApiService {
   private get_jwt_identity_from_token(token: string): string {
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
-      return payload.sub; // 'sub' contient l'identity (user_id)
+      return payload.sub;
     } catch (e) {
       console.error('Erreur lors du décodage du token JWT:', e);
       return '';
@@ -145,9 +168,7 @@ export class ApiService {
       `${this.baseUrl}/auth/register`,
       { username, email, password, confirm_password: confirmPassword, role },
       { headers: this.getHeaders() }
-    ).pipe(
-      catchError(this.handleError)
-    );
+    ).pipe(catchError(this.handleError));
   }
 
   requestPasswordReset(email: string): Observable<{ message: string }> {
@@ -155,9 +176,7 @@ export class ApiService {
       `${this.baseUrl}/auth/reset-password/request`,
       { email },
       { headers: this.getHeaders() }
-    ).pipe(
-      catchError(this.handleError)
-    );
+    ).pipe(catchError(this.handleError));
   }
 
   sendPublicRequest(formData: FormData): Observable<{ request_id: number }> {
@@ -184,17 +203,33 @@ export class ApiService {
   }
 
   sendPrivateMessage(farmerUsername: string, expertUsername: string, formData: FormData): Observable<{ message_id: number }> {
-    return this.http.post<{ message_id: number }>(
-      `${this.baseUrl}/expert/session/${farmerUsername}/${expertUsername}/message`,
-      formData,
-      { headers: this.getHeaders() }
-    ).pipe(catchError(this.handleError));
+    const cleanFarmer = farmerUsername.trim();
+    const cleanExpert = expertUsername.trim();
+    const url = `${this.baseUrl}/expert/session/${encodeURIComponent(cleanFarmer)}/${encodeURIComponent(cleanExpert)}/message`;
+    return this.http.post<{ message_id: number }>(url, formData, { headers: this.getHeaders() }).pipe(
+      catchError(error => {
+        if (error.status === 401) {
+          console.log('Token expiré, tentative de déconnexion.');
+          this.logout();
+          return throwError(() => new Error('Session expirée, veuillez vous reconnecter.'));
+        }
+        return this.handleError(error);
+      })
+    );
   }
+
   getSessionMessages(farmerUsername: string, expertUsername: string): Observable<SessionMessage[]> {
-    return this.http.get<SessionMessage[]>(
-      `${this.baseUrl}/expert/session/${farmerUsername}/${expertUsername}/messages`,
-      { headers: this.getHeaders() }
-    ).pipe(catchError(this.handleError));
+    const url = `${this.baseUrl}/expert/session/${farmerUsername}/${expertUsername}/messages`;
+    return this.http.get<SessionMessage[]>(url, { headers: this.getHeaders() }).pipe(
+      catchError(error => {
+        if (error.status === 404) {
+          return throwError(() => new Error('Aucun message trouvé pour cette session.'));
+        } else if (error.status === 403) {
+          return throwError(() => new Error('Accès refusé : vous n’êtes pas autorisé à voir ces messages.'));
+        }
+        return this.handleError(error);
+      })
+    );
   }
 
   getUserSessions(): Observable<Session[]> {
@@ -211,27 +246,32 @@ export class ApiService {
     ).pipe(catchError(this.handleError));
   }
 
+  endSession(farmerUsername: string, expertUsername: string): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(
+      `${this.baseUrl}/expert/session/${farmerUsername}/${expertUsername}/end`,
+      {},
+      { headers: this.getHeaders() }
+    ).pipe(catchError(this.handleError));
+  }
+
   getLiveComments(): Observable<LiveComment[]> {
     return this.http.get<LiveComment[]>(
       `${this.baseUrl}/live/comments`,
       { headers: this.getHeaders() }
     ).pipe(catchError(this.handleError));
   }
-  
+
   postLiveComment(comment: string): Observable<{ message: string }> {
-    console.log('Envoi du commentaire :', comment); // Log avant envoi
+    console.log('Envoi du commentaire :', comment);
     const headers = this.getHeaders();
-    console.log('Headers envoyés :', headers); // Vérifier le token
+    console.log('Headers envoyés :', headers);
     return this.http.post<{ message: string }>(
       `${this.baseUrl}/live/comment`,
       { comment },
       { headers }
     ).pipe(
-      tap(response => console.log('Réponse brute du serveur :', response)), // Log succès brut
-      catchError(error => {
-        console.error('Erreur brute lors de la soumission :', error);
-        return this.handleError(error);
-      })
+      tap(response => console.log('Réponse brute du serveur :', response)),
+      catchError(this.handleError)
     );
   }
 
@@ -244,7 +284,7 @@ export class ApiService {
 
   sendChatMessage(message: string, conversationId: string | null): Observable<ChatResponse> {
     if (!conversationId) {
-      return throwError(() => new Error('L\'ID de la conversation est requis.'));
+      return throwError(() => new Error('L’ID de la conversation est requis.'));
     }
     return this.http.post<ChatResponse>(
       `${this.baseUrl}/chat/send`,
@@ -284,7 +324,7 @@ export class ApiService {
 
   deleteConversation(conversationId: string): Observable<{ message: string }> {
     if (!conversationId) {
-      return throwError(() => new Error('L\'ID de la conversation est requis.'));
+      return throwError(() => new Error('L’ID de la conversation est requis.'));
     }
     return this.http.delete<{ message: string }>(
       `${this.baseUrl}/chat/conversations/${conversationId}`,
@@ -319,9 +359,8 @@ export class ApiService {
 
   getWeather(city: string = 'Dakar'): Observable<WeatherResponse> {
     const url = `${this.baseUrl}/weather/local`;
-    const headers = this.getHeaders();
     return this.http.get<WeatherResponse>(url, {
-      headers,
+      headers: this.getHeaders(),
       params: { city }
     }).pipe(catchError(this.handleError));
   }
@@ -350,34 +389,25 @@ export class ApiService {
 
   getWeatherByCoords(lat: number, lon: number): Observable<WeatherResponse> {
     const url = `${this.baseUrl}/weather/local`;
-    const headers = this.getHeaders();
     return this.http.get<WeatherResponse>(url, {
-      headers,
-      params: {
-        lat: lat.toString(),
-        lon: lon.toString()
-      }
+      headers: this.getHeaders(),
+      params: { lat: lat.toString(), lon: lon.toString() }
     }).pipe(catchError(this.handleError));
   }
 
   getHourlyForecast(city: string): Observable<ForecastResponse[]> {
     const url = `${this.baseUrl}/weather/forecast`;
-    const headers = this.getHeaders();
     return this.http.get<ForecastResponse[]>(url, {
-      headers,
+      headers: this.getHeaders(),
       params: { city }
     }).pipe(catchError(this.handleError));
   }
 
   getHourlyForecastByCoords(lat: number, lon: number): Observable<ForecastResponse[]> {
     const url = `${this.baseUrl}/weather/forecast`;
-    const headers = this.getHeaders();
     return this.http.get<ForecastResponse[]>(url, {
-      headers,
-      params: {
-        lat: lat.toString(),
-        lon: lon.toString()
-      }
+      headers: this.getHeaders(),
+      params: { lat: lat.toString(), lon: lon.toString() }
     }).pipe(catchError(this.handleError));
   }
 
@@ -401,6 +431,7 @@ export class ApiService {
       { headers: this.getHeaders() }
     ).pipe(catchError(this.handleError));
   }
+
   createUser(userData: { username: string; email: string; password?: string; role: string; is_admin: boolean }): Observable<{ message: string }> {
     return this.http.post<{ message: string }>(
       `${this.baseUrl}/admin/users`,
@@ -409,7 +440,6 @@ export class ApiService {
     ).pipe(catchError(this.handleError));
   }
 
-  // Mise à jour pour inclure role
   updateUser(userId: number, userData: { username: string; email: string; role: string; is_admin: boolean }): Observable<{ message: string }> {
     return this.http.put<{ message: string }>(
       `${this.baseUrl}/admin/users/${userId}`,

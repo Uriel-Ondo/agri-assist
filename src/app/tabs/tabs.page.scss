@@ -1,88 +1,174 @@
-// Variables de thème AgriAssist
-:root {
-    --agri-green: #4CAF50; // Vert startup (déjà utilisé dans votre CSS)
-    --agri-light-gray: #E0E0E0; // Gris clair pour les bordures
-    --agri-dark-gray: #757575; // Gris pour les icônes/labels non sélectionnés
-    --agri-white: #FFFFFF; // Blanc pour le fond
-    --agri-shadow: rgba(0, 0, 0, 0.1); // Ombre légère
+// Variables de thème
+$primary-gradient: linear-gradient(135deg, #4CAF50 0%, #81C784 100%);
+$shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+$hover-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+$transition: all 0.3s ease-in-out;
+$neon-glow: 0 0 8px rgba(76, 175, 80, 0.5);
+
+// Style de la barre d’onglets
+ion-tab-bar.custom-tab-bar {
+  --background: transparent;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(10px);
+  border-top: none;
+  box-shadow: $shadow;
+  padding: 5px 0;
+  height: 70px;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  border-radius: 20px 20px 0 0;
+  margin: 0 10px 10px 10px;
+  max-width: 100%; // Empêche le débordement horizontal
+  overflow: hidden; // Coupe tout contenu qui dépasse
+}
+
+// Style des boutons d’onglets
+ion-tab-button.tab-button {
+  --ripple-color: transparent;
+  flex: 1; // Chaque bouton prend une part égale de l’espace
+  padding: 0 8px;
+  transition: $transition;
+  position: relative;
+  max-width: 20%; // Limite la largeur maximale par onglet
+
+  // Icône
+  ion-icon.tab-icon {
+    font-size: 28px; // Taille par défaut
+    margin-bottom: 4px;
+    transition: $transition;
   }
-  
-  // Style de la barre d’onglets
-  ion-tab-bar {
-    --background: var(--agri-white);
-    --color: var(--agri-dark-gray);
-    --color-selected: var(--agri-green);
-    border-top: 1px solid var(--agri-light-gray);
-    box-shadow: 0 -2px 5px var(--agri-shadow); // Ombre subtile en haut
-    padding: 0; // Supprime tout padding par défaut
-    display: flex; // Assure une disposition flexible
-    justify-content: space-between; // Répartit les onglets uniformément
-    align-items: center;
-    height: 60px; // Hauteur fixe pour une meilleure consistance
+
+  // Label
+  ion-label {
+    font-size: 11px;
+    font-weight: 600;
+    font-family: 'Poppins', sans-serif;
+    color: #666;
+    transition: $transition;
+    white-space: nowrap; // Empêche le texte de se casser
+    overflow: hidden; // Coupe le texte qui dépasse
+    text-overflow: ellipsis; // Ajoute des points si le texte est coupé
   }
-  
-  // Style des boutons d’onglets
-  ion-tab-button {
-    --ripple-color: var(--agri-green);
-    flex: 1; // Chaque bouton prend une part égale de l’espace
-    max-width: none; // Supprime toute contrainte de largeur maximale
-    padding: 0 5px; // Padding horizontal léger pour éviter un collage
-    transition: all 0.3s ease; // Animation fluide pour les changements
-  
+
+  // Effet au survol ou clic
+  &:hover,
+  &[aria-selected="true"] {
+    transform: scale(1.1);
     ion-icon {
-      font-size: 24px; // Taille des icônes
-      margin-bottom: 2px; // Espace entre icône et label
+      animation: bounce 0.5s ease infinite;
     }
-  
     ion-label {
-      font-size: 12px; // Taille du texte pour éviter un débordement
-      font-family: 'Arial', sans-serif;
-      font-weight: 500;
-    }
-  
-    // Effet au survol (si applicable sur mobile)
-    &:hover {
-      --color: var(--agri-green);
-    }
-  
-    // Ajustement pour l’état sélectionné
-    &[aria-selected="true"] {
-      transform: scale(1.05); // Légère mise en avant de l’onglet actif
+      color: inherit;
     }
   }
-  
-  // Ajustement pour éviter les tab-bars multiples (de global.scss)
-  ion-tab-bar:not(:first-of-type) {
-    display: none !important;
+
+  // Couleurs spécifiques par onglet
+  &.home {
+    ion-icon { color: #4CAF50; }
+    &[aria-selected="true"] { background: rgba(76, 175, 80, 0.1); }
   }
-  
-  // Ajustements responsives
-  @media (max-width: 576px) {
-    ion-tab-bar {
-      height: 50px; // Réduit la hauteur sur petits écrans
+  &.live {
+    ion-icon { color: #e91e63; }
+    &[aria-selected="true"] { background: rgba(233, 30, 99, 0.1); }
+  }
+  &.detection {
+    ion-icon { color: #2196f3; }
+    &[aria-selected="true"] { background: rgba(33, 150, 243, 0.1); }
+  }
+  &.experts {
+    ion-icon { color: #ff9800; }
+    &[aria-selected="true"] { background: rgba(255, 152, 0, 0.1); }
+  }
+  &.weather {
+    ion-icon { color: #03a9f4; }
+    &[aria-selected="true"] { background: rgba(3, 169, 244, 0.1); }
+  }
+  &.chatbot {
+    ion-icon { color: #9c27b0; }
+    &[aria-selected="true"] { background: rgba(156, 39, 176, 0.1); }
+  }
+  &.profile {
+    ion-icon { color: #673ab7; }
+    &[aria-selected="true"] { background: rgba(103, 58, 183, 0.1); }
+  }
+
+  // Effet néon pour l’onglet actif
+  &[aria-selected="true"]::before {
+    content: '';
+    position: absolute;
+    bottom: 5px;
+    width: 50%;
+    height: 3px;
+    background: currentColor;
+    border-radius: 2px;
+    box-shadow: $neon-glow;
+  }
+}
+
+// Animation de rebond
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+// Ajustements responsives
+@media (max-width: 400px) { // Très petits écrans (ex. vieux téléphones)
+  ion-tab-bar.custom-tab-bar {
+    height: 50px;
+    margin: 0 2px 2px 2px;
+    padding: 2px 0;
+  }
+
+  ion-tab-button.tab-button {
+    padding: 0 4px;
+    max-width: 14.28%; // 100% / 7 onglets
+
+    ion-icon.tab-icon {
+      font-size: 20px; // Réduction pour petits écrans
+      margin-bottom: 2px;
     }
-  
-    ion-tab-button {
-      padding: 0 3px; // Réduit le padding sur petits écrans
-  
-      ion-icon {
-        font-size: 20px; // Réduit la taille des icônes
-      }
-  
-      ion-label {
-        font-size: 10px; // Réduit la taille du texte
-      }
+
+    ion-label {
+      font-size: 8px; // Texte plus petit
     }
   }
-  
-  @media (min-width: 577px) and (max-width: 768px) {
-    ion-tab-button {
-      ion-icon {
-        font-size: 22px;
-      }
-  
-      ion-label {
-        font-size: 11px;
-      }
+}
+
+@media (min-width: 401px) and (max-width: 576px) { // Petits écrans
+  ion-tab-bar.custom-tab-bar {
+    height: 60px;
+    margin: 0 5px 5px 5px;
+  }
+
+  ion-tab-button.tab-button {
+    padding: 0 6px;
+    max-width: 14.28%;
+
+    ion-icon.tab-icon {
+      font-size: 24px;
+    }
+
+    ion-label {
+      font-size: 10px;
     }
   }
+}
+
+@media (min-width: 577px) and (max-width: 768px) { // Écrans moyens (tablettes)
+  ion-tab-bar.custom-tab-bar {
+    height: 65px;
+  }
+
+  ion-tab-button.tab-button {
+    padding: 0 8px;
+
+    ion-icon.tab-icon {
+      font-size: 26px;
+    }
+
+    ion-label {
+      font-size: 11px;
+    }
+  }
+}

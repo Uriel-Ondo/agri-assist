@@ -1,15 +1,15 @@
-import { Component, AfterViewInit, OnDestroy } from '@angular/core';
+import { Component, AfterViewInit, OnDestroy, ChangeDetectorRef, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { IonicModule } from '@ionic/angular';
 import { FormsModule } from '@angular/forms';
-import { io } from 'socket.io-client';
+import { io, Socket } from 'socket.io-client';
 import Hls from 'hls.js';
-import { ApiService } from '../services/api.service';
+import { ApiService, LiveComment } from '../services/api.service';
 
-interface LiveComment {
-  username: string;
-  comment: string;
-  created_at: string;
+interface Channel {
+  value: string;
+  name: string;
+  color?: string;
 }
 
 @Component({
@@ -19,65 +19,44 @@ interface LiveComment {
   standalone: true,
   imports: [CommonModule, IonicModule, FormsModule]
 })
-export class LivePage implements AfterViewInit, OnDestroy {
-  socket: any;
+export class LivePage implements OnInit, AfterViewInit, OnDestroy {
+  socket!: Socket;
   comments: LiveComment[] = [];
   newComment = '';
-  selectedChannel = 'EURONEWS';
+  selectedChannel = 'tv5monde';
+  channels: Channel[] = [
+    { value: 'info6', name: 'INFO6', color: '#e91e63' },
+    { value: 'france24', name: 'France24', color: '#2196f3' },
+    { value: 'tv5monde', name: 'TV5MONDE', color: '#e91e63' },
+    { value: 'animesama', name: 'AnimeSama', color: '#2196f3' },
+    { value: 'tvanime', name: 'TVAnime', color: '#4CAF50' }
+  ];
   isLoading = false;
   videoError = false;
   private hls: Hls | null = null;
 
-  constructor(private apiService: ApiService) {
+  constructor(
+    private apiService: ApiService,
+    private cdr: ChangeDetectorRef
+  ) {}
+
+  ngOnInit() {
+    const token = localStorage.getItem('access_token');
+    console.log('Token utilisé pour Socket.IO:', token);
     this.socket = io('http://localhost:5000/live', {
+      path: '/socket.io',
       transports: ['websocket'],
       reconnection: true,
-      reconnectionAttempts: 5
+      reconnectionAttempts: 10, // Augmenté pour plus de tentatives
+      reconnectionDelay: 1000
     });
+    this.setupSocket();
   }
 
   ngAfterViewInit() {
-    this.initializeHbbTV();
-    this.setupSocket();
-    this.loadInitialComments();
-  }
-
-  initializeHbbTV() {
-    const broadcastVideo = document.getElementById('broadcast-video') as HTMLObjectElement;
     const hlsVideo = document.getElementById('hls-video') as HTMLVideoElement;
-
-    const isHbbTVSupported = this.checkHbbTVSupport();
-    if (isHbbTVSupported) {
-      try {
-        const appManager = document.createElement('object');
-        appManager.setAttribute('type', 'application/oipfApplicationManager');
-        appManager.style.display = 'none';
-        document.body.appendChild(appManager);
-
-        const app = (appManager as any).getOwnerApplication(document);
-        if (app) {
-          app.show();
-          app.activate();
-          (app.privateData as any).keyset.setValue(0x1f);
-        }
-
-        (broadcastVideo as any).bindToCurrentChannel();
-        broadcastVideo.style.display = 'block';
-        hlsVideo.style.display = 'none';
-        this.isLoading = false;
-      } catch (error) {
-        console.error('Erreur lors de l’initialisation HbbTV:', error);
-        this.fallbackToHls(hlsVideo);
-      }
-    } else {
-      console.warn('HbbTV non supporté, passage au flux HLS');
-      this.fallbackToHls(hlsVideo);
-    }
-  }
-
-  checkHbbTVSupport(): boolean {
-    const userAgent = navigator.userAgent.toLowerCase();
-    return userAgent.includes('hbbtv') || (window as any).HbbTV !== undefined;
+    this.loadInitialComments();
+    this.fallbackToHls(hlsVideo);
   }
 
   async fallbackToHls(video: HTMLVideoElement) {
@@ -97,13 +76,26 @@ export class LivePage implements AfterViewInit, OnDestroy {
       return;
     }
 
-    if (Hls.isSupported()) {
+    console.log('URL HLS récupérée:', hlsUrl);
+
+    if (hlsUrl.endsWith('.mp4')) {
+      video.src = hlsUrl;
+      video.load();
+      video.onloadeddata = () => {
+        this.isLoading = false;
+        video.play().catch(err => console.error('Erreur de lecture MP4:', err));
+      };
+      video.onerror = () => {
+        this.isLoading = false;
+        this.videoError = true;
+      };
+    } else if (Hls.isSupported()) {
       this.hls = new Hls();
       this.hls.loadSource(hlsUrl);
       this.hls.attachMedia(video);
       this.hls.on(Hls.Events.MANIFEST_PARSED, () => {
         this.isLoading = false;
-        video.play();
+        video.play().catch(err => console.error('Erreur de lecture HLS:', err));
       });
       this.hls.on(Hls.Events.ERROR, (event, data) => {
         console.error('Erreur HLS:', data);
@@ -115,7 +107,7 @@ export class LivePage implements AfterViewInit, OnDestroy {
       video.load();
       video.onloadeddata = () => {
         this.isLoading = false;
-        video.play();
+        video.play().catch(err => console.error('Erreur de lecture native:', err));
       };
       video.onerror = () => {
         this.isLoading = false;
@@ -143,27 +135,30 @@ export class LivePage implements AfterViewInit, OnDestroy {
   }
 
   changeChannel() {
+    console.log('Changement de chaîne vers:', this.selectedChannel);
     const hlsVideo = document.getElementById('hls-video') as HTMLVideoElement;
     this.fallbackToHls(hlsVideo);
   }
 
-  async loadInitialComments() {
-    try {
-      const response = await fetch('http://localhost:5000/live/comments');
-      const data = await response.json();
-      this.comments = data;
-      this.scrollToBottom();
-    } catch (error) {
-      console.error('Erreur lors du chargement des commentaires initiaux:', error);
-    }
+  loadInitialComments() {
+    this.apiService.getLiveComments().subscribe({
+      next: (comments) => {
+        this.comments = comments;
+        this.scrollToBottom();
+        console.log('Commentaires initiaux chargés:', comments);
+      },
+      error: (error) => {
+        console.error('Erreur lors du chargement des commentaires initiaux:', error);
+      }
+    });
   }
+
   sendComment() {
     if (this.newComment.trim()) {
       console.log('Envoi du commentaire via API:', this.newComment);
       this.apiService.postLiveComment(this.newComment).subscribe({
         next: (response) => {
           console.log('Réponse API:', response);
-          // Le commentaire sera reçu via Socket.IO si le backend émet
           this.newComment = '';
           this.scrollToBottom();
         },
@@ -179,28 +174,33 @@ export class LivePage implements AfterViewInit, OnDestroy {
   setupSocket() {
     this.socket.on('connect', () => {
       console.log('Connecté au namespace /live');
-      // Test d'émission manuelle pour vérifier
-      this.socket.emit('test_event', { message: 'Test de connexion' });
     });
-  
+
     this.socket.on('new_comment', (data: LiveComment) => {
       console.log('Nouveau commentaire reçu via Socket.IO:', data);
       this.comments.push(data);
+      this.cdr.detectChanges(); // Forcer la mise à jour de l’UI
       this.scrollToBottom();
     });
-  
+
     this.socket.on('connect_error', (error: any) => {
       console.error('Erreur de connexion Socket.IO:', error);
     });
-  
-    this.socket.on('disconnect', () => {
-      console.log('Déconnecté du namespace /live');
+
+    this.socket.on('disconnect', (reason: string) => {
+      console.log('Déconnecté du namespace /live:', reason);
     });
-  
-    // Ajouter un écouteur pour le test
-    this.socket.on('test_event', (data: any) => {
-      console.log('Événement de test reçu:', data);
+
+    this.socket.on('message', (data: any) => {
+      console.log('Message brut reçu via Socket.IO:', data);
     });
+
+    // Vérifier si le socket est connecté après initialisation
+    if (this.socket.connected) {
+      console.log('Socket déjà connecté lors de l’initialisation');
+    } else {
+      console.log('Socket en attente de connexion');
+    }
   }
 
   scrollToBottom() {
@@ -214,6 +214,7 @@ export class LivePage implements AfterViewInit, OnDestroy {
       }
     }, 100);
   }
+
   ngOnDestroy() {
     if (this.hls) {
       this.hls.destroy();

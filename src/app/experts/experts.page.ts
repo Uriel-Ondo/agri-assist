@@ -1,10 +1,11 @@
 import { Component, OnInit, ViewChild, ElementRef, AfterViewChecked, OnDestroy, ChangeDetectorRef } from '@angular/core';
-import { IonicModule, AlertController } from '@ionic/angular';
-import { ApiService, ProfileResponse, Session, SessionMessage } from '../services/api.service';
+import { IonicModule, AlertController, ModalController, AlertButton } from '@ionic/angular';
+import { ApiService, ProfileResponse, Session, SessionMessage, PrivateMessageResponse, LiveComment, CallLog } from '../services/api.service';
+import { WebsocketService } from '../services/websocket.service'; // Importer WebsocketService
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import Peer from 'simple-peer';
-import { io, Socket } from 'socket.io-client';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-experts',
@@ -20,7 +21,7 @@ export class ExpertsPage implements OnInit, AfterViewChecked, OnDestroy {
   messages: any[] = [];
   sessions: Session[] = [];
   sessionMessages: SessionMessage[] = [];
-  currentSession: { farmerUsername: string; expertUsername: string } | null = null;
+  currentSession: { farmerUsername: string; expertUsername: string; requestId?: number } | null = null;
   messageContent: string = '';
   requestType: string = 'text';
   requestContent: string = '';
@@ -30,24 +31,52 @@ export class ExpertsPage implements OnInit, AfterViewChecked, OnDestroy {
   audioChunks: Blob[] = [];
   localStream: MediaStream | null = null;
   peer: Peer.Instance | null = null;
-  private socket!: Socket;
   isSessionEnded: boolean = false;
   incomingCall: { type: 'audio' | 'video'; signal: any; sender: string } | null = null;
+  hiddenSessions: Set<number> = new Set();
+  activeCallModal: any = null;
+  private audioElements: Map<number, HTMLAudioElement> = new Map();
+  callLogs: CallLog[] = [];
+  private subscriptions: Subscription[] = []; // Pour gérer les abonnements WebSocket
 
   constructor(
     private apiService: ApiService,
+    private websocketService: WebsocketService, // Remplacer Socket par WebsocketService
     private alertController: AlertController,
+    private modalController: ModalController,
     private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit() {
     const userId = localStorage.getItem('user_id');
-    if (userId) {
-      this.initializeSocket(userId);
+    const token = localStorage.getItem('access_token');
+    console.log('ngOnInit experts.page - userId:', userId, 'token:', token);
+    if (!userId || userId === 'undefined' || !userId.match(/^\d+$/) || !token) {
+      console.error('user_id ou token invalide dans localStorage:', { userId, token });
+      this.presentAlert('Erreur', 'Utilisateur non identifié ou session expirée. Veuillez vous reconnecter.');
+      this.apiService.logout();
+      return;
     }
+
+    this.initializeWebSocketListeners(); // Initialiser les listeners WebSocket
     this.loadProfile();
     this.loadPublicRequests();
     this.loadSessions();
+
+    // Vérifier la connexion WebSocket
+    this.subscriptions.push(
+      this.websocketService.getConnectionStatus().subscribe(status => {
+        console.log('État de la connexion WebSocket:', status);
+        if (status && this.sessions.length > 0) {
+          this.sessions.forEach(session => this.joinSessionRoom(session.session_id));
+        }
+      })
+    );
+
+    // S'assurer que la connexion WebSocket est établie
+    if (!this.websocketService['socket']?.connected) {
+      this.websocketService.connect();
+    }
   }
 
   ngAfterViewChecked() {
@@ -55,112 +84,192 @@ export class ExpertsPage implements OnInit, AfterViewChecked, OnDestroy {
   }
 
   ngOnDestroy() {
-    if (this.socket) {
-      this.socket.disconnect();
-    }
+    this.subscriptions.forEach(sub => sub.unsubscribe()); // Désabonner les listeners WebSocket
+    this.websocketService.disconnect(); // Utiliser la méthode disconnect du service
     this.closeChat();
+    this.closeCallModal();
+    this.audioElements.forEach(audio => audio.pause());
+    this.audioElements.clear();
   }
 
-  initializeSocket(userId: string) {
-    if (!userId) return;
+  private logFormData(formData: FormData): void {
+    const entries: [string, any][] = [];
+    formData.forEach((value, key) => entries.push([key, value]));
+    console.log('FormData:', entries);
+  }
 
-    this.socket = io('http://127.0.0.1:5000/expert', {
-      query: { user_id: userId },
-      transports: ['websocket'],
-      auth: { token: localStorage.getItem('access_token') || '' }
-    });
-
-    this.socket.on('connect', () => {
-      console.log('Connecté au WebSocket');
-    });
-
-    this.socket.on('new_public_request', (data: any) => {
-      if (this.userRole === 'expert') {
-        this.messages.push(data);
-        this.presentAlert('Nouvelle demande', 'Une nouvelle demande publique est disponible.');
+  initializeWebSocketListeners() {
+    this.subscriptions.push(
+      this.websocketService.getNewPublicRequest().subscribe(data => {
+        console.log('Nouvelle demande publique reçue:', data);
+        if (this.userRole === 'expert') {
+          this.messages.push(data);
+          this.presentAlert('Nouvelle demande', 'Une nouvelle demande publique est disponible.');
+        } else if (this.userRole === 'farmer' && data.username === this.profile?.username) {
+          this.messages.push(data);
+        }
         this.cdr.detectChanges();
-      }
-    });
-
-    this.socket.on('private_session_started', (data: Session) => {
-      this.sessions.push(data);
-      if (this.userRole === 'farmer') {
-        this.presentAlert('Session démarrée', 'Un expert a répondu à votre demande.');
-      }
-      this.cdr.detectChanges();
-    });
-
-    this.socket.on('new_private_message', (data: SessionMessage & { status?: 'sent' | 'received' | 'read' }) => {
-      console.log('Nouveau message reçu via WebSocket:', data);
-      if (this.currentSession && data.session_id === this.getCurrentSessionId()) {
-        this.sessionMessages.push(data);
-        this.checkSessionStatus();
-        this.scrollToBottom();
-        if (data.sender_username !== this.profile?.username) {
-          if (data.message_type === 'text' || data.message_type === 'image' || data.message_type === 'video' || data.message_type === 'audio') {
-            this.presentNotification('Nouveau message', `${data.sender_username}: ${data.content.substring(0, 20)}...`);
-            this.markMessageAsRead(data.id);
-          } else if (data.message_type === 'audio_call' || data.message_type === 'video_call') {
-            this.incomingCall = { type: data.message_type as 'audio' | 'video', signal: null, sender: data.sender_username };
-            this.presentCallNotification(data.message_type, data);
-          } else if (data.message_type === 'audio_call_signal' || data.message_type === 'video_call_signal') {
-            if (this.incomingCall && this.incomingCall.sender === data.sender_username) {
-              this.incomingCall.signal = JSON.parse(data.content);
-              this.presentCallNotification(data.message_type.split('_')[0], data);
+      })
+    );
+  
+    this.subscriptions.push(
+      this.websocketService.getSessionStarted().subscribe((data: Session) => {
+        console.log('Session privée démarrée:', data);
+        this.sessions.push(data);
+        if (this.userRole === 'farmer' && data.farmer_username === this.profile?.username) {
+          this.presentAlert('Session démarrée', 'Un expert a répondu à votre demande.');
+        }
+        this.joinSessionRoom(data.session_id);
+        this.cdr.detectChanges();
+      })
+    );
+  
+    this.subscriptions.push(
+      this.websocketService.getNewMessage().subscribe((data: SessionMessage | LiveComment) => {
+        // Vérifier si c'est un SessionMessage
+        if ('id' in data && 'session_id' in data) {
+          const sessionMessage = data as SessionMessage;
+          console.log('Nouveau message privé reçu:', sessionMessage);
+          const sessionId = this.getCurrentSessionId();
+          const isCurrentSession = this.currentSession && sessionMessage.session_id === sessionId &&
+            (sessionMessage.request_id ?? undefined) === this.currentSession.requestId;
+  
+          if (sessionMessage.message_type === 'audio_call' || sessionMessage.message_type === 'video_call') {
+            const callType = sessionMessage.message_type === 'audio_call' ? 'audio' : 'video';
+            this.incomingCall = { type: callType, signal: null, sender: sessionMessage.sender_username };
+            this.addCallLog(callType, sessionMessage.sender_username, this.profile!.username, 'received');
+            if (!isCurrentSession) {
+              const session = this.sessions.find(s => s.session_id === sessionMessage.session_id);
+              if (session) this.openSession(session.farmer_username, session.expert_username, session.request_id ?? undefined);
+            }
+            this.presentNotification('Appel entrant', `${sessionMessage.sender_username} vous appelle (${callType})`);
+            this.presentCallModal(callType, sessionMessage.sender_username, true);
+          } else if (sessionMessage.message_type === 'audio_call_signal' || sessionMessage.message_type === 'video_call_signal') {
+            if (this.incomingCall && this.incomingCall.sender === sessionMessage.sender_username) {
+              this.incomingCall.signal = JSON.parse(sessionMessage.content);
+              const callType = sessionMessage.message_type.startsWith('audio') ? 'audio' : 'video';
+              this.presentCallModal(callType, sessionMessage.sender_username, true);
+            }
+          } else {
+            const messageExists = this.sessionMessages.some(m => m.id === sessionMessage.id);
+            if (!messageExists) {
+              let finalContent = sessionMessage.content;
+              if (['image', 'video', 'audio'].includes(sessionMessage.message_type) && finalContent && !finalContent.match(/^https?:\/\//)) {
+                finalContent = `http://192.168.1.90:5000${finalContent.startsWith('/') ? '' : '/'}${finalContent}`;
+                console.log(`Ajustement URL pour message ${sessionMessage.id}: ${sessionMessage.content} -> ${finalContent}`);
+                this.checkMediaUrl(finalContent, (isValid) => {
+                  if (!isValid) {
+                    console.error(`URL de média invalide: ${finalContent}`);
+                    this.presentAlert('Erreur', `Impossible de charger le média: ${finalContent}`);
+                  }
+                });
+              }
+              sessionMessage.content = finalContent;
+  
+              // Ajouter le message à la fin pour ordre croissant
+              if (sessionMessage.session_id === sessionId) {
+                this.sessionMessages.push(sessionMessage);
+                this.checkSessionStatus();
+                this.scrollToBottom(true); // Forcer le défilement au bas immédiatement
+              }
+  
+              // Notification pour les messages d'autres utilisateurs
+              if (sessionMessage.sender_username !== this.profile?.username) {
+                const session = this.sessions.find(s => s.session_id === sessionMessage.session_id);
+                if (session) {
+                  this.presentNotification(
+                    'Nouveau message',
+                    `De ${sessionMessage.sender_username} dans ${session.farmer_username} - ${session.expert_username}`,
+                    () => {
+                      this.openSession(session.farmer_username, session.expert_username, session.request_id ?? undefined);
+                      setTimeout(() => this.scrollToBottom(true), 300); // Forcer le défilement après ouverture
+                    }
+                  );
+                  if (isCurrentSession) this.markMessageAsRead(sessionMessage.id);
+                }
+              }
             }
           }
+        } else {
+          console.log('Message ignoré (pas un SessionMessage):', data);
         }
-      }
-      this.cdr.detectChanges();
-    });
-
-    this.socket.on('session_ended', (data: any) => {
-      if (this.currentSession && data.session_id === this.getCurrentSessionId()) {
-        this.isSessionEnded = true;
-        this.sessionMessages.push({
-          id: Date.now(),
-          session_id: this.getCurrentSessionId()!,
-          sender_username: 'Système',
-          message_type: 'session_ended',
-          content: data.message,
-          created_at: new Date().toISOString()
-        });
-        this.scrollToBottom();
-        this.presentAlert('Session terminée', data.message);
         this.cdr.detectChanges();
-      }
-    });
+      })
+    );
+  
+    this.subscriptions.push(
+      this.websocketService.getSessionEnded().subscribe((data: any) => {
+        console.log('Session terminée reçue:', data);
+        if (this.currentSession && data.session_id === this.getCurrentSessionId()) {
+          this.isSessionEnded = true;
+          this.sessionMessages.push({
+            id: Date.now(),
+            session_id: this.getCurrentSessionId()!,
+            sender_username: 'Système',
+            message_type: 'session_ended',
+            content: data.message,
+            created_at: new Date().toISOString()
+          });
+          this.scrollToBottom();
+          this.presentAlert('Session terminée', data.message);
+          this.cdr.detectChanges();
+        }
+      })
+    );
+  
+    this.subscriptions.push(
+      this.websocketService.getMessageStatusUpdate().subscribe((data: { message_id: number; status: string }) => {
+        console.log('Mise à jour statut message:', data);
+        const message = this.sessionMessages.find(msg => msg.id === data.message_id);
+        if (message) {
+          message.status = data.status as 'sent' | 'received' | 'read';
+          this.cdr.detectChanges();
+        }
+      })
+    );
+  
+    this.subscriptions.push(
+      this.websocketService.getCallStatusUpdate().subscribe((data: { session_id: number; call_id: number; status: string }) => {
+        console.log('Mise à jour statut appel:', data);
+        const call = this.callLogs.find(c => c.id === data.call_id);
+        if (call) {
+          call.status = data.status as CallLog['status'];
+          this.cdr.detectChanges();
+        }
+      })
+    );
+  }
 
-    this.socket.on('session_deleted', (data: any) => {
-      if (this.currentSession && data.session_id === this.getCurrentSessionId()) {
-        this.presentAlert('Session supprimée', data.message);
-        this.closeChat();
-      }
-      this.sessions = this.sessions.filter(s => s.session_id !== data.session_id);
-      this.cdr.detectChanges();
-    });
-
-    this.socket.on('message_status_update', (data: { message_id: number; status: 'sent' | 'received' | 'read' }) => {
-      const message = this.sessionMessages.find(msg => msg.id === data.message_id);
-      if (message) {
-        message.status = data.status;
-        this.cdr.detectChanges();
-      }
-    });
+  private checkMediaUrl(url: string, callback: (isValid: boolean) => void) {
+    const testElement = url.includes('.mp4') ? document.createElement('video') :
+                       url.includes('.wav') || url.includes('.mp3') || url.includes('.webm') ? new Audio() :
+                       new Image();
+    testElement.onload = () => callback(true);
+    testElement.onerror = (e) => {
+      console.error(`Erreur de chargement pour ${url}:`, e);
+      callback(false);
+    };
+    testElement.src = url;
   }
 
   joinSessionRoom(sessionId: number) {
-    if (this.socket && sessionId) {
-      this.socket.emit('join_session', { session_id: sessionId }, (response: any) => {
-        console.log('Rejoint la room de session:', sessionId, response);
-      });
-    }
+    this.websocketService.joinSession(sessionId); // Utiliser WebsocketService
   }
 
-  scrollToBottom() {
-    if (this.messagesContainer) {
-      this.messagesContainer.nativeElement.scrollTop = this.messagesContainer.nativeElement.scrollHeight;
-    }
+  scrollToBottom(force: boolean = false) {
+    setTimeout(() => {
+      if (this.messagesContainer) {
+        const container = this.messagesContainer.nativeElement;
+        if (force) {
+          container.scrollTop = container.scrollHeight; // Forcer au bas
+        } else {
+          const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 1;
+          if (isAtBottom) {
+            container.scrollTop = container.scrollHeight;
+          }
+        }
+      }
+    }, 100);
   }
 
   loadProfile() {
@@ -177,6 +286,7 @@ export class ExpertsPage implements OnInit, AfterViewChecked, OnDestroy {
   loadPublicRequests() {
     this.apiService.getPublicRequests().subscribe({
       next: (data) => {
+        console.log('Demandes publiques chargées:', data);
         this.messages = data;
         this.cdr.detectChanges();
       },
@@ -187,7 +297,11 @@ export class ExpertsPage implements OnInit, AfterViewChecked, OnDestroy {
   loadSessions() {
     this.apiService.getUserSessions().subscribe({
       next: (data) => {
+        console.log('Sessions chargées:', data);
         this.sessions = data;
+        if (this.websocketService['socket']?.connected) {
+          this.sessions.forEach(session => this.joinSessionRoom(session.session_id));
+        }
         this.cdr.detectChanges();
       },
       error: (error) => console.error('Erreur chargement sessions:', error)
@@ -198,31 +312,51 @@ export class ExpertsPage implements OnInit, AfterViewChecked, OnDestroy {
     const formData = new FormData();
     formData.append('request_type', this.requestType);
     if (this.requestType === 'text') {
+      if (!this.requestContent.trim()) {
+        this.presentAlert('Erreur', 'Le contenu du message ne peut pas être vide.');
+        return;
+      }
       formData.append('content', this.requestContent);
     } else if (this.selectedFile) {
       formData.append('file', this.selectedFile);
+    } else {
+      this.presentAlert('Erreur', 'Aucun fichier sélectionné.');
+      return;
     }
 
+    console.log('Envoi demande publique');
+    this.logFormData(formData);
     this.apiService.sendPublicRequest(formData).subscribe({
-      next: async () => {
+      next: async (response) => {
+        console.log('Demande publique envoyée:', response);
         this.requestContent = '';
         this.selectedFile = null;
         this.requestType = 'text';
         await this.presentAlert('Succès', 'Demande envoyée avec succès.');
+        if (this.userRole === 'farmer') {
+          this.messages.push({
+            request_id: response.request_id,
+            username: this.profile?.username,
+            request_type: this.requestType,
+            content: this.requestType === 'text' ? this.requestContent : this.selectedFile ? URL.createObjectURL(this.selectedFile) : '',
+            created_at: new Date().toISOString(),
+            responded: false
+          });
+          this.cdr.detectChanges();
+        }
       },
-      error: async (error) => {
-        await this.presentAlert('Erreur', error.message || 'Erreur lors de l’envoi de la demande.');
-      }
+      error: async (error) => await this.presentAlert('Erreur', error.message || 'Erreur lors de l’envoi de la demande.')
     });
   }
 
   onFileSelected(event: any) {
     this.selectedFile = event.target.files[0];
     if (this.selectedFile && this.currentSession) {
-      this.sendMessage(this.selectedFile.type.startsWith('video') ? 'video' : 
-                       this.selectedFile.type.startsWith('image') ? 'image' : 'audio');
+      const type = this.selectedFile.type.startsWith('video') ? 'video' :
+                   this.selectedFile.type.startsWith('image') ? 'image' : 'audio';
+      this.sendMessage(type);
     } else if (this.selectedFile) {
-      this.requestType = this.selectedFile.type.startsWith('video') ? 'video' : 
+      this.requestType = this.selectedFile.type.startsWith('video') ? 'video' :
                          this.selectedFile.type.startsWith('image') ? 'image' : 'audio';
     }
   }
@@ -230,7 +364,7 @@ export class ExpertsPage implements OnInit, AfterViewChecked, OnDestroy {
   handleMessageClick(message: any) {
     if (this.userRole === 'farmer' && message.responded) {
       const session = this.sessions.find(s => s.request_id === message.request_id);
-      if (session) this.openSession(session.farmer_username, session.expert_username);
+      if (session) this.openSession(session.farmer_username, session.expert_username, session.request_id ?? undefined);
     } else if (this.userRole === 'expert' && !message.responded) {
       this.respondToRequest(message.request_id);
     }
@@ -243,33 +377,53 @@ export class ExpertsPage implements OnInit, AfterViewChecked, OnDestroy {
 
     this.apiService.respondToRequest(requestId, formData).subscribe({
       next: (response) => {
-        this.openSession(response.farmer_username, response.expert_username);
+        console.log('Réponse à la demande:', response);
+        this.openSession(response.farmer_username, response.expert_username, requestId);
       },
-      error: async (error) => {
-        await this.presentAlert('Erreur', error.message || 'Erreur lors de la réponse à la demande.');
+      error: async (error) => await this.presentAlert('Erreur', error.message || 'Erreur lors de la réponse à la demande.')
+    });
+  }
+
+  openSession(farmerUsername: string, expertUsername: string, requestId?: number) {
+    console.log('Ouverture session:', { farmerUsername, expertUsername, requestId });
+    this.currentSession = { farmerUsername, expertUsername, requestId };
+    this.isSessionEnded = false;
+    this.incomingCall = null;
+    this.sessionMessages = [];
+    this.apiService.getSessionMessages(farmerUsername, expertUsername, requestId).subscribe({
+      next: (data) => {
+        console.log('Messages récupérés pour la session:', data);
+        const sessionId = this.getCurrentSessionId();
+        if (!sessionId) {
+          console.error('ID de session introuvable.');
+          this.presentAlert('Erreur', 'Impossible de charger les messages : session introuvable.');
+          return;
+        }
+        this.sessionMessages = data
+          .filter(msg => msg.session_id === sessionId)
+          .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) // Ordre croissant
+          .map(msg => {
+            if (['image', 'video', 'audio'].includes(msg.message_type) && msg.content && !msg.content.match(/^https?:\/\//)) {
+              const adjustedUrl = `http://192.168.1.90:5000${msg.content.startsWith('/') ? '' : '/'}${msg.content}`;
+              console.log(`Ajustement URL pour message ${msg.id}: ${msg.content} -> ${adjustedUrl}`);
+              this.checkMediaUrl(adjustedUrl, (isValid) => {
+                if (!isValid) console.error(`URL de média invalide: ${adjustedUrl}`);
+              });
+              return { ...msg, content: adjustedUrl };
+            }
+            return msg;
+          });
+        this.checkSessionStatus();
+        this.joinSessionRoom(sessionId);
+        this.scrollToBottom(true); // Forcer le défilement au bas
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        console.error('Erreur chargement messages:', error);
+        this.presentAlert('Erreur', error.message || 'Impossible de charger les messages de la session.');
       }
     });
   }
-
-  openSession(farmerUsername: string, expertUsername: string) {
-    this.currentSession = { farmerUsername, expertUsername };
-    this.isSessionEnded = false;
-    this.incomingCall = null;
-    this.apiService.getSessionMessages(farmerUsername, expertUsername).subscribe({
-      next: (data) => {
-        this.sessionMessages = data.map(msg => ({ ...msg, status: msg.status || 'read' }));
-        this.checkSessionStatus();
-        const sessionId = this.getCurrentSessionId();
-        if (sessionId) {
-          this.joinSessionRoom(sessionId); // Rejoindre la room de la session
-        }
-        this.scrollToBottom();
-        this.cdr.detectChanges();
-      },
-      error: (error) => console.error('Erreur chargement messages:', error)
-    });
-  }
-
   checkSessionStatus() {
     this.isSessionEnded = this.sessionMessages.some(msg => msg.message_type === 'session_ended');
     this.cdr.detectChanges();
@@ -283,20 +437,65 @@ export class ExpertsPage implements OnInit, AfterViewChecked, OnDestroy {
 
     const formData = new FormData();
     formData.append('message_type', type);
+    let content = '';
     if (type === 'text') {
-      formData.append('content', this.messageContent);
+      if (!this.messageContent.trim()) {
+        this.presentAlert('Erreur', 'Le message ne peut pas être vide.');
+        return;
+      }
+      content = this.messageContent;
+      formData.append('content', content);
     } else if (this.selectedFile) {
       formData.append('file', this.selectedFile);
+      content = URL.createObjectURL(this.selectedFile);
+    } else {
+      this.presentAlert('Erreur', 'Aucun fichier sélectionné pour ce type de message.');
+      return;
+    }
+    if (this.currentSession.requestId !== undefined) {
+      formData.append('request_id', this.currentSession.requestId.toString());
     }
 
+    console.log('Envoi message - type:', type);
+    this.logFormData(formData);
     this.apiService.sendPrivateMessage(this.currentSession.farmerUsername, this.currentSession.expertUsername, formData).subscribe({
-      next: () => {
+      next: (response: PrivateMessageResponse) => {
+        console.log('Message envoyé:', response);
+        let finalContent = type === 'text' ? content : response.content || content;
+        if (['image', 'video', 'audio'].includes(type)) {
+          if (response.content) {
+            finalContent = `http://192.168.1.90:5000${response.content.startsWith('/') ? '' : '/'}${response.content}`;
+            console.log(`Utilisation de l’URL serveur pour message ${response.message_id}: ${finalContent}`);
+            this.checkMediaUrl(finalContent, (isValid) => {
+              if (!isValid) {
+                console.error(`URL de média invalide: ${finalContent}`);
+                this.presentAlert('Erreur', `Impossible de charger le média: ${finalContent}`);
+              }
+            });
+          } else {
+            console.warn('Aucun contenu renvoyé par le serveur, utilisation URL temporaire:', content);
+          }
+        }
+        const newMessage: SessionMessage = {
+          id: response.message_id,
+          session_id: this.getCurrentSessionId()!,
+          sender_username: this.profile?.username || '',
+          message_type: type,
+          content: finalContent,
+          created_at: new Date().toISOString(),
+          status: 'sent',
+          request_id: this.currentSession?.requestId
+        };
+        this.sessionMessages.push(newMessage);
         this.messageContent = '';
         this.selectedFile = null;
+        this.scrollToBottom();
+        this.cdr.detectChanges();
       },
       error: async (error) => {
+        console.error('Erreur envoi message:', error);
         await this.presentAlert('Erreur', error.message || 'Erreur lors de l’envoi du message.');
-        if (error.message.includes('terminée')) {
+        if (error.message?.includes('terminée')) {
           this.isSessionEnded = true;
           this.cdr.detectChanges();
         }
@@ -305,33 +504,133 @@ export class ExpertsPage implements OnInit, AfterViewChecked, OnDestroy {
   }
 
   markMessageAsRead(messageId: number) {
-    if (this.socket && this.currentSession) {
-      this.socket.emit('mark_message_read', { message_id: messageId, session_id: this.getCurrentSessionId() }, (response: any) => {
-        console.log('Message marqué comme lu:', response);
-      });
+    const sessionId = this.getCurrentSessionId();
+    if (sessionId) {
+      this.websocketService.markMessageAsRead(sessionId, messageId); // Utiliser WebsocketService
     }
   }
 
   async toggleRecording() {
     if (!this.isRecording) {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      this.mediaRecorder = new MediaRecorder(stream);
+      this.mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
       this.audioChunks = [];
       this.mediaRecorder.ondataavailable = (event) => this.audioChunks.push(event.data);
-      this.mediaRecorder.onstop = () => this.saveRecording();
+      this.mediaRecorder.onstop = () => this.convertAndSaveRecording();
       this.mediaRecorder.start();
       this.isRecording = true;
+      console.log('Enregistrement démarré');
+      this.cdr.detectChanges();
     } else {
       this.mediaRecorder?.stop();
-      this.mediaRecorder?.stream.getTracks().forEach(track => track.stop());
       this.isRecording = false;
+      console.log('Enregistrement arrêté');
     }
   }
 
-  saveRecording() {
-    const audioBlob = new Blob(this.audioChunks, { type: 'audio/wav' });
-    this.selectedFile = new File([audioBlob], `recording_${Date.now()}.wav`, { type: 'audio/wav' });
-    this.sendMessage('audio');
+  async convertAndSaveRecording() {
+    try {
+      const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
+      this.selectedFile = new File([audioBlob], `recording_${Date.now()}.webm`, { type: 'audio/webm' });
+      this.sendMessage('audio');
+    } catch (error) {
+      console.error('Erreur conversion audio:', error);
+      this.presentAlert('Erreur', 'Échec de l’enregistrement de la note vocale.');
+    } finally {
+      this.audioChunks = [];
+      this.mediaRecorder?.stream.getTracks().forEach(track => track.stop());
+      this.mediaRecorder = null;
+      this.cdr.detectChanges();
+    }
+  }
+
+  toggleAudio(msg: SessionMessage) {
+    let audio = this.audioElements.get(msg.id);
+    if (!audio) {
+      audio = new Audio(msg.content);
+      audio.addEventListener('timeupdate', () => this.updateAudioProgress(msg));
+      audio.addEventListener('loadedmetadata', () => {
+        console.log(`Audio chargé: ${msg.content}, durée: ${audio!.duration}s`);
+        this.cdr.detectChanges();
+      });
+      audio.addEventListener('ended', () => this.cdr.detectChanges());
+      audio.addEventListener('error', (e) => {
+        console.error(`Erreur de chargement audio: ${msg.content}`, e);
+        this.presentAlert('Erreur', `Impossible de charger l’audio: ${msg.content}`);
+      });
+      this.audioElements.set(msg.id, audio);
+    }
+
+    if (audio.paused) {
+      audio.play().catch((e) => {
+        console.error('Erreur lecture audio:', e);
+        this.presentAlert('Erreur', `Impossible de lire l’audio: ${e.message}`);
+      });
+    } else {
+      audio.pause();
+    }
+    this.cdr.detectChanges();
+  }
+
+  isPlaying(msg: SessionMessage): boolean {
+    const audio = this.audioElements.get(msg.id);
+    return audio ? !audio.paused && !audio.ended : false;
+  }
+
+  getProgress(msg: SessionMessage): string {
+    const audio = this.audioElements.get(msg.id);
+    if (!audio || !audio.duration) return '0%';
+    return `${(audio.currentTime / audio.duration) * 100}%`;
+  }
+
+  getDuration(msg: SessionMessage): string {
+    const audio = this.audioElements.get(msg.id);
+    if (!audio || !audio.duration) return '0:00';
+    const totalSeconds = Math.floor(audio.duration);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds < 10 ? '0' + seconds : seconds}`;
+  }
+
+  seekAudio(event: MouseEvent, msg: SessionMessage) {
+    const audio = this.audioElements.get(msg.id);
+    if (!audio || !audio.duration) return;
+
+    const progressBar = event.currentTarget as HTMLElement;
+    const rect = progressBar.getBoundingClientRect();
+    const clickX = event.clientX - rect.left;
+    const newTime = (clickX / rect.width) * audio.duration;
+    audio.currentTime = newTime;
+    this.cdr.detectChanges();
+  }
+
+  updateAudioProgress(msg: SessionMessage) {
+    this.cdr.detectChanges();
+  }
+
+  addCallLog(type: 'audio' | 'video', caller: string, receiver: string, status: CallLog['status']) {
+    const callLog: CallLog = {
+      id: Date.now(),
+      type,
+      caller,
+      receiver,
+      status,
+      timestamp: new Date().toISOString()
+    };
+    this.callLogs.push(callLog);
+    this.cdr.detectChanges();
+  }
+
+  updateCallStatus(callId: number, status: CallLog['status']) {
+    const call = this.callLogs.find(c => c.id === callId);
+    if (call && this.currentSession) {
+      call.status = status;
+      this.apiService.updateCallStatus(this.currentSession.farmerUsername, this.currentSession.expertUsername, callId, status).subscribe({
+        next: () => console.log(`Statut appel ${callId} mis à jour à ${status}`),
+        error: (err) => console.error('Erreur mise à jour statut appel:', err)
+      });
+      this.cdr.detectChanges();
+    }
   }
 
   async startCall(type: 'audio' | 'video') {
@@ -340,6 +639,8 @@ export class ExpertsPage implements OnInit, AfterViewChecked, OnDestroy {
       return;
     }
 
+    const callId = Date.now();
+    this.addCallLog(type, this.profile!.username, this.currentSession.expertUsername, 'ongoing');
     this.localStream = await navigator.mediaDevices.getUserMedia({ video: type === 'video', audio: true });
     this.peer = new Peer({ initiator: true, trickle: false, stream: this.localStream });
 
@@ -347,6 +648,9 @@ export class ExpertsPage implements OnInit, AfterViewChecked, OnDestroy {
       const formData = new FormData();
       formData.append('message_type', `${type}_call_signal`);
       formData.append('content', JSON.stringify(data));
+      if (this.currentSession!.requestId !== undefined) {
+        formData.append('request_id', this.currentSession!.requestId.toString());
+      }
       this.apiService.sendPrivateMessage(this.currentSession!.farmerUsername, this.currentSession!.expertUsername, formData).subscribe({
         next: () => console.log('Signal envoyé'),
         error: (error) => console.error('Erreur envoi signal:', error)
@@ -354,17 +658,25 @@ export class ExpertsPage implements OnInit, AfterViewChecked, OnDestroy {
     });
 
     this.peer.on('stream', (stream) => {
-      this.displayCallStream(stream, type, true);
+      this.presentCallModal(type, this.currentSession!.expertUsername, false, stream);
+    });
+
+    this.peer.on('error', (err) => {
+      console.error('Erreur Peer:', err);
+      this.updateCallStatus(callId, 'ended');
+      this.endCall();
     });
 
     const formData = new FormData();
     formData.append('message_type', `${type}_call`);
     formData.append('content', `${type === 'video' ? 'Appel vidéo' : 'Appel audio'} initié`);
+    if (this.currentSession!.requestId !== undefined) {
+      formData.append('request_id', this.currentSession!.requestId.toString());
+    }
     this.apiService.sendPrivateMessage(this.currentSession.farmerUsername, this.currentSession.expertUsername, formData).subscribe({
-      next: async () => {
-        await this.presentAlert('Succès', `${type === 'video' ? 'Appel vidéo' : 'Appel audio'} initié avec succès.`);
-      },
+      next: async () => await this.presentCallModal(type, this.currentSession!.expertUsername, false),
       error: async (error) => {
+        this.updateCallStatus(callId, 'ended');
         await this.presentAlert('Erreur', error.message || 'Erreur lors de l’initiation de l’appel.');
       }
     });
@@ -372,84 +684,143 @@ export class ExpertsPage implements OnInit, AfterViewChecked, OnDestroy {
 
   async answerCall() {
     if (!this.incomingCall || !this.currentSession) return;
-
-    this.localStream = await navigator.mediaDevices.getUserMedia({ video: this.incomingCall.type === 'video', audio: true });
+  
+    const incomingCall = this.incomingCall;
+    const callId = this.callLogs.find(c => c.caller === incomingCall.sender && c.status === 'received')?.id;
+    if (callId) this.updateCallStatus(callId, 'ongoing');
+  
+    this.localStream = await navigator.mediaDevices.getUserMedia({ video: incomingCall.type === 'video', audio: true });
     this.peer = new Peer({ initiator: false, trickle: false, stream: this.localStream });
-
+  
     this.peer.on('signal', (data) => {
       const formData = new FormData();
-      formData.append('message_type', `${this.incomingCall!.type}_call_signal`);
+      formData.append('message_type', `${incomingCall.type}_call_signal`);
       formData.append('content', JSON.stringify(data));
+      if (this.currentSession!.requestId !== undefined) {
+        formData.append('request_id', this.currentSession!.requestId.toString());
+      }
       this.apiService.sendPrivateMessage(this.currentSession!.farmerUsername, this.currentSession!.expertUsername, formData).subscribe({
         next: () => console.log('Signal réponse envoyé'),
         error: (error) => console.error('Erreur envoi signal réponse:', error)
       });
     });
-
+  
     this.peer.on('stream', (stream) => {
-      this.displayCallStream(stream, this.incomingCall!.type, false);
+      // Mettre à jour le modal avec le flux distant
+      this.presentCallModal(incomingCall.type, incomingCall.sender, false, stream);
     });
-
-    this.peer.signal(this.incomingCall.signal);
+  
+    this.peer.on('error', (err) => {
+      console.error('Erreur Peer:', err);
+      if (callId) this.updateCallStatus(callId, 'ended');
+      this.endCall();
+    });
+  
+    // Signaler immédiatement pour établir la connexion
+    this.peer.signal(incomingCall.signal);
+  
+    // Afficher immédiatement le modal avec le flux local
+    this.presentCallModal(incomingCall.type, incomingCall.sender, false);
     this.incomingCall = null;
     this.cdr.detectChanges();
   }
 
-  displayCallStream(stream: MediaStream, type: string, isInitiator: boolean) {
-    const elementId = `call-${type}-${Date.now()}`;
-    const element = document.createElement(type === 'video' ? 'video' : 'audio');
-    element.id = elementId;
-    element.srcObject = stream;
-    element.autoplay = true;
-    element.controls = true;
-    element.classList.add(`message-${type}`);
-
-    const message: SessionMessage = {
-      id: Date.now(),
-      session_id: this.getCurrentSessionId()!,
-      sender_username: isInitiator ? this.profile?.username || '' : this.incomingCall?.sender || 'Inconnu',
-      message_type: type,
-      content: elementId,
-      created_at: new Date().toISOString(),
-      status: 'sent'
-    };
-    this.sessionMessages.push(message);
-    setTimeout(() => {
-      const container = this.messagesContainer.nativeElement;
-      container.appendChild(element);
-      this.scrollToBottom();
-      this.cdr.detectChanges();
-    }, 100);
-  }
-
   declineCall() {
+    if (this.incomingCall) {
+      const callId = this.callLogs.find(c => c.caller === this.incomingCall!.sender && c.status === 'received')?.id;
+      if (callId) this.updateCallStatus(callId, 'missed');
+    }
     this.incomingCall = null;
+    this.closeCallModal();
     this.presentAlert('Appel refusé', 'Vous avez refusé l’appel.');
     this.cdr.detectChanges();
   }
 
-  deleteSession() {
-    if (!this.currentSession) return;
-    this.apiService.deleteSession(this.currentSession.farmerUsername, this.currentSession.expertUsername).subscribe({
-      next: async () => {
-        this.closeChat();
-        await this.presentAlert('Succès', 'Session supprimée avec succès.');
-      },
-      error: async (error) => {
-        await this.presentAlert('Erreur', error.message || 'Erreur lors de la suppression de la session.');
+  async showImageModal(imageUrl: string) {
+    this.checkMediaUrl(imageUrl, async (isValid) => {
+      if (!isValid) {
+        this.presentAlert('Erreur', `Image invalide ou inaccessible: ${imageUrl}`);
+        return;
       }
+      const modal = await this.modalController.create({
+        component: ImageModalComponent,
+        componentProps: { imageUrl },
+        cssClass: 'image-modal'
+      });
+      await modal.present();
     });
+  }
+
+  async presentCallModal(type: 'audio' | 'video', caller: string, isIncoming: boolean, remoteStream?: MediaStream) {
+    if (this.activeCallModal) return;
+
+    const modal = await this.modalController.create({
+      component: CallModalComponent,
+      componentProps: {
+        callType: type,
+        caller,
+        isIncoming,
+        localStream: this.localStream,
+        remoteStream,
+        onAccept: () => this.answerCall(),
+        onDecline: () => this.declineCall(),
+        onEnd: () => this.endCall()
+      },
+      cssClass: 'call-modal',
+      backdropDismiss: false
+    });
+
+    this.activeCallModal = modal;
+    await modal.present();
+    modal.onDidDismiss().then(() => {
+      this.activeCallModal = null;
+      this.cdr.detectChanges();
+    });
+  }
+
+  endCall() {
+    const ongoingCall = this.callLogs.find(c => c.status === 'ongoing');
+    if (ongoingCall) this.updateCallStatus(ongoingCall.id, 'ended');
+    this.peer?.destroy();
+    this.peer = null;
+    this.localStream?.getTracks().forEach(track => track.stop());
+    this.localStream = null;
+    this.closeCallModal();
+    
+    // Restaurer la vue de la discussion si une session est active
+    if (this.currentSession) {
+      this.scrollToBottom(true); // Forcer le défilement au bas
+    }
+    this.cdr.detectChanges();
+  }
+
+  closeCallModal() {
+    if (this.activeCallModal) {
+      this.activeCallModal.dismiss();
+      this.activeCallModal = null;
+    }
+  }
+
+  hideSession() {
+    if (!this.currentSession) return;
+    const sessionId = this.getCurrentSessionId();
+    if (sessionId) {
+      this.hiddenSessions.add(sessionId);
+      this.closeChat();
+      this.presentAlert('Succès', 'Conversation masquée.');
+      this.cdr.detectChanges();
+    }
+  }
+
+  showHiddenSessions() {
+    this.presentHiddenSessionsAlert();
   }
 
   endSession() {
     if (!this.currentSession) return;
     this.apiService.endSession(this.currentSession.farmerUsername, this.currentSession.expertUsername).subscribe({
-      next: async () => {
-        await this.presentAlert('Succès', 'Session terminée avec succès.');
-      },
-      error: async (error) => {
-        await this.presentAlert('Erreur', error.message || 'Erreur lors de la fin de la session.');
-      }
+      next: async () => await this.presentAlert('Succès', 'Session terminée avec succès.'),
+      error: async (error) => await this.presentAlert('Erreur', error.message || 'Erreur lors de la fin de la session.')
     });
   }
 
@@ -466,9 +837,10 @@ export class ExpertsPage implements OnInit, AfterViewChecked, OnDestroy {
   }
 
   private getCurrentSessionId(): number | undefined {
-    const session = this.sessions.find(s => 
-      s.farmer_username === this.currentSession?.farmerUsername && 
-      s.expert_username === this.currentSession?.expertUsername
+    const session = this.sessions.find(s =>
+      s.farmer_username === this.currentSession?.farmerUsername &&
+      s.expert_username === this.currentSession?.expertUsername &&
+      (!this.currentSession?.requestId || s.request_id === this.currentSession.requestId)
     );
     return session?.session_id;
   }
@@ -482,37 +854,225 @@ export class ExpertsPage implements OnInit, AfterViewChecked, OnDestroy {
     await alert.present();
   }
 
-  async presentNotification(header: string, message: string) {
+  async presentNotification(header: string, message: string, onOpen?: () => void) {
+    const buttons: AlertButton[] = [
+      {
+        text: 'Ouvrir',
+        handler: () => {
+          if (onOpen) {
+            onOpen();
+            // Forcer le défilement après ouverture
+            setTimeout(() => this.scrollToBottom(true), 300); // Délai pour attendre le rendu
+          } else if (this.currentSession) {
+            this.openSession(this.currentSession.farmerUsername, this.currentSession.expertUsername, this.currentSession.requestId);
+            setTimeout(() => this.scrollToBottom(true), 300);
+          }
+          return true;
+        }
+      },
+      { text: 'Ignorer', role: 'cancel' }
+    ];
+  
     const alert = await this.alertController.create({
       header,
       message,
-      buttons: [{
-        text: 'Ouvrir',
-        handler: () => {
-          if (this.currentSession) {
-            this.openSession(this.currentSession.farmerUsername, this.currentSession.expertUsername);
-          }
-        }
-      }, 'Ignorer']
+      buttons
     });
     await alert.present();
   }
 
-  async presentCallNotification(type: string, data: any) {
+  async presentHiddenSessionsAlert() {
+    const hiddenSessions = this.sessions.filter(s => this.hiddenSessions.has(s.session_id));
+    const inputs = hiddenSessions.map(session => ({
+      name: `${session.session_id}`,
+      type: 'radio' as const,
+      label: `${session.farmer_username} - ${session.expert_username} (Demande #${session.request_id ?? 'N/A'})`,
+      value: session
+    }));
+
     const alert = await this.alertController.create({
-      header: `Appel ${type === 'video' ? 'vidéo' : 'audio'} entrant`,
-      message: `Appel de ${data.sender_username}`,
+      header: 'Conversations masquées',
+      inputs,
       buttons: [
+        { text: 'Annuler', role: 'cancel' },
         {
-          text: 'Accepter',
-          handler: () => this.answerCall()
-        },
-        {
-          text: 'Refuser',
-          handler: () => this.declineCall()
+          text: 'Afficher',
+          handler: (selectedSession: Session) => {
+            if (selectedSession) {
+              this.hiddenSessions.delete(selectedSession.session_id);
+              this.openSession(selectedSession.farmer_username, selectedSession.expert_username, selectedSession.request_id ?? undefined);
+            }
+          }
         }
       ]
     });
     await alert.present();
+  }
+}
+
+// Les composants ImageModalComponent et CallModalComponent restent inchangés
+@Component({
+  selector: 'app-image-modal',
+  template: `
+    <ion-header>
+      <ion-toolbar>
+        <ion-buttons slot="start">
+          <ion-button (click)="dismiss()">
+            <ion-icon name="arrow-back"></ion-icon>
+          </ion-button>
+        </ion-buttons>
+        <ion-title>Image</ion-title>
+      </ion-toolbar>
+    </ion-header>
+    <ion-content class="ion-padding" [inert]="!isModalOpen">
+      <ion-img [src]="imageUrl" (click)="dismiss()"></ion-img>
+    </ion-content>
+  `,
+  standalone: true,
+  imports: [IonicModule, CommonModule]
+})
+export class ImageModalComponent {
+  imageUrl!: string;
+  isModalOpen: boolean = true;
+
+  constructor(private modalController: ModalController) {}
+
+  dismiss() {
+    this.isModalOpen = false;
+    this.modalController.dismiss();
+  }
+}
+
+@Component({
+  selector: 'app-call-modal',
+  template: `
+    <ion-content class="call-modal-content" [inert]="!isModalOpen">
+      <div class="call-header">
+        <ion-avatar>
+          <img src="/assets/default-avatar.png" alt="Caller">
+        </ion-avatar>
+        <h2>{{ caller }}</h2>
+        <p>{{ callType === 'video' ? 'Appel vidéo' : 'Appel audio' }} {{ isIncoming ? 'entrant' : 'en cours' }}</p>
+      </div>
+      <div class="call-streams" *ngIf="!isIncoming || remoteStream">
+        <video *ngIf="callType === 'video'" #localVideo autoplay muted class="local-video"></video>
+        <video *ngIf="callType === 'video' && remoteStream" #remoteVideo autoplay class="remote-video"></video>
+        <audio *ngIf="callType === 'audio' && remoteStream" #remoteAudio autoplay></audio>
+      </div>
+      <ion-buttons class="call-actions">
+        <ion-button *ngIf="isIncoming" color="success" (click)="onAccept()">
+          <ion-icon name="call"></ion-icon> Accepter
+        </ion-button>
+        <ion-button *ngIf="isIncoming" color="danger" (click)="handleDecline()">
+          <ion-icon name="call-outline"></ion-icon> Refuser
+        </ion-button>
+        <ion-button *ngIf="!isIncoming" color="danger" (click)="handleEnd()">
+          <ion-icon name="call-end"></ion-icon> Raccrocher
+        </ion-button>
+      </ion-buttons>
+    </ion-content>
+  `,
+  styles: [`
+    .call-modal-content {
+      --background: #f5f5f5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      height: 100%;
+      padding: 20px;
+    }
+    .call-header {
+      text-align: center;
+      margin-top: 20px;
+    }
+    .call-header ion-avatar {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 10px;
+    }
+    .call-header h2 {
+      font-size: 1.5rem;
+      color: #333;
+    }
+    .call-header p {
+      font-size: 1rem;
+      color: #666;
+    }
+    .call-streams {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+    }
+    .local-video {
+      width: 120px;
+      height: 160px;
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      border-radius: 10px;
+      border: 2px solid #fff;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+    .remote-video {
+      width: 100%;
+      max-height: 70vh;
+      border-radius: 10px;
+    }
+    .call-actions {
+      margin-bottom: 20px;
+    }
+    .call-actions ion-button {
+      --border-radius: 50%;
+      width: 60px;
+      height: 60px;
+      margin: 0 10px;
+    }
+  `],
+  standalone: true,
+  imports: [IonicModule, CommonModule]
+})
+export class CallModalComponent {
+  @ViewChild('localVideo') localVideo!: ElementRef;
+  @ViewChild('remoteVideo') remoteVideo!: ElementRef;
+  @ViewChild('remoteAudio') remoteAudio!: ElementRef;
+
+  callType!: 'audio' | 'video';
+  caller!: string;
+  isIncoming!: boolean;
+  localStream!: MediaStream | null;
+  remoteStream!: MediaStream | null;
+  onAccept!: () => void;
+  onDecline!: () => void;
+  onEnd!: () => void;
+  isModalOpen: boolean = true;
+
+  constructor(private cdr: ChangeDetectorRef) {}
+
+  ngAfterViewInit() {
+    if (this.localStream && this.localVideo) {
+      this.localVideo.nativeElement.srcObject = this.localStream;
+    }
+    if (this.remoteStream) {
+      if (this.callType === 'video' && this.remoteVideo) {
+        this.remoteVideo.nativeElement.srcObject = this.remoteStream;
+      } else if (this.callType === 'audio' && this.remoteAudio) {
+        this.remoteAudio.nativeElement.srcObject = this.remoteStream;
+      }
+    }
+    this.cdr.detectChanges();
+  }
+
+  handleDecline() {
+    this.isModalOpen = false;
+    this.onDecline();
+  }
+
+  handleEnd() {
+    this.isModalOpen = false;
+    this.onEnd();
   }
 }

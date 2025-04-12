@@ -2,8 +2,9 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpErrorResponse } from '@angular/common/http';
 import { Observable, throwError } from 'rxjs';
 import { catchError, tap } from 'rxjs/operators';
+import { WebsocketService } from './websocket.service';
 
-// Interfaces pour typage des réponses
+// Interfaces existantes (inchangées sauf ajout de LiveSession)
 export interface ChatResponse {
   response: string;
   created_at: string;
@@ -20,7 +21,7 @@ export interface PublicRequest {
 }
 
 export interface Session {
-  session_id: number;  // Déjà ajouté comme demandé
+  session_id: number;
   farmer_username: string;
   expert_username: string;
   request_id: number | null;
@@ -42,7 +43,8 @@ export interface SessionMessage {
   message_type: string;
   content: string;
   created_at: string;
-  status?: 'sent' | 'received' | 'read'; // Ajout de la propriété status (optionnelle)
+  status?: 'sent' | 'received' | 'read';
+  request_id?: number;
 }
 
 export interface ChatMessage {
@@ -61,10 +63,24 @@ export interface Conversation {
   id: string;
 }
 
+export interface PrivateMessageResponse {
+  message_id: number;
+  content?: string;
+}
+
 export interface WeatherResponse {
   city: string;
   temperature: number;
   description: string;
+}
+
+export interface CallLog {
+  id: number;
+  type: 'audio' | 'video';
+  caller: string;
+  receiver: string;
+  status: 'ongoing' | 'received' | 'missed' | 'ended';
+  timestamp: string;
 }
 
 export interface ForecastResponse {
@@ -79,6 +95,17 @@ export interface LiveComment {
   created_at: string;
 }
 
+export interface LiveSession {
+  session_id: number;
+  expert_username: string;
+  stream_url: string;
+  stream_type: 'hls' | 'srs';
+  title: string;
+  started_at: string;
+  ended_at?: string;
+  status: 'active' | 'ended';
+}
+
 export interface ProfileResponse {
   username: string;
   email: string;
@@ -91,9 +118,9 @@ export interface ProfileResponse {
   providedIn: 'root'
 })
 export class ApiService {
-  private baseUrl = 'http://127.0.0.1:5000';
+  private baseUrl = 'http://192.168.1.90:5000';
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, private websocketService: WebsocketService) {}
 
   private getHeaders(): HttpHeaders {
     const token = localStorage.getItem('access_token');
@@ -133,6 +160,7 @@ export class ApiService {
           errorMessage = error.error?.message || 'Erreur inattendue.';
       }
     }
+    console.error(`Erreur HTTP ${error.status}: ${errorMessage}`, error);
     return throwError(() => new Error(errorMessage));
   }
 
@@ -144,10 +172,14 @@ export class ApiService {
     ).pipe(
       tap(response => {
         console.log('Réponse login:', response);
+        if (!response.access_token || !response.role || !response.user || !response.user.id) {
+          throw new Error('Réponse du serveur invalide : champs manquants.');
+        }
         localStorage.setItem('access_token', response.access_token);
         localStorage.setItem('role', response.role);
         localStorage.setItem('user_id', response.user.id.toString());
         console.log('user_id stocké:', response.user.id);
+        this.websocketService.connect(); // Initialiser la connexion WebSocket après login
       }),
       catchError(this.handleError)
     );
@@ -202,11 +234,13 @@ export class ApiService {
     ).pipe(catchError(this.handleError));
   }
 
-  sendPrivateMessage(farmerUsername: string, expertUsername: string, formData: FormData): Observable<{ message_id: number }> {
+  sendPrivateMessage(farmerUsername: string, expertUsername: string, formData: FormData): Observable<PrivateMessageResponse> {
     const cleanFarmer = farmerUsername.trim();
     const cleanExpert = expertUsername.trim();
     const url = `${this.baseUrl}/expert/session/${encodeURIComponent(cleanFarmer)}/${encodeURIComponent(cleanExpert)}/message`;
-    return this.http.post<{ message_id: number }>(url, formData, { headers: this.getHeaders() }).pipe(
+    console.log('Envoi message privé à:', url, 'avec données:', Array.from((formData as any).entries()));
+    return this.http.post<PrivateMessageResponse>(url, formData, { headers: this.getHeaders() }).pipe(
+      tap(response => console.log('Réponse sendPrivateMessage:', response)),
       catchError(error => {
         if (error.status === 401) {
           console.log('Token expiré, tentative de déconnexion.');
@@ -218,9 +252,14 @@ export class ApiService {
     );
   }
 
-  getSessionMessages(farmerUsername: string, expertUsername: string): Observable<SessionMessage[]> {
-    const url = `${this.baseUrl}/expert/session/${farmerUsername}/${expertUsername}/messages`;
+  getSessionMessages(farmerUsername: string, expertUsername: string, requestId?: number): Observable<SessionMessage[]> {
+    let url = `${this.baseUrl}/expert/session/${encodeURIComponent(farmerUsername)}/${encodeURIComponent(expertUsername)}/messages`;
+    if (requestId !== undefined) {
+      url += `?request_id=${requestId}`;
+    }
+    console.log('Récupération messages session:', url);
     return this.http.get<SessionMessage[]>(url, { headers: this.getHeaders() }).pipe(
+      tap(messages => console.log('Messages récupérés:', messages)),
       catchError(error => {
         if (error.status === 404) {
           return throwError(() => new Error('Aucun message trouvé pour cette session.'));
@@ -236,19 +275,22 @@ export class ApiService {
     return this.http.get<Session[]>(
       `${this.baseUrl}/expert/sessions`,
       { headers: this.getHeaders() }
-    ).pipe(catchError(this.handleError));
+    ).pipe(
+      tap(sessions => console.log('Sessions récupérées:', sessions)),
+      catchError(this.handleError)
+    );
   }
 
   deleteSession(farmerUsername: string, expertUsername: string): Observable<{ message: string }> {
     return this.http.delete<{ message: string }>(
-      `${this.baseUrl}/expert/session/${farmerUsername}/${expertUsername}`,
+      `${this.baseUrl}/expert/session/${encodeURIComponent(farmerUsername)}/${encodeURIComponent(expertUsername)}`,
       { headers: this.getHeaders() }
     ).pipe(catchError(this.handleError));
   }
 
   endSession(farmerUsername: string, expertUsername: string): Observable<{ message: string }> {
     return this.http.post<{ message: string }>(
-      `${this.baseUrl}/expert/session/${farmerUsername}/${expertUsername}/end`,
+      `${this.baseUrl}/expert/session/${encodeURIComponent(farmerUsername)}/${encodeURIComponent(expertUsername)}/end`,
       {},
       { headers: this.getHeaders() }
     ).pipe(catchError(this.handleError));
@@ -271,6 +313,38 @@ export class ApiService {
       { headers }
     ).pipe(
       tap(response => console.log('Réponse brute du serveur :', response)),
+      catchError(this.handleError)
+    );
+  }
+
+  getLiveSessions(): Observable<LiveSession[]> {
+    return this.http.get<LiveSession[]>(
+      `${this.baseUrl}/live/sessions`,
+      { headers: this.getHeaders() }
+    ).pipe(
+      tap(sessions => console.log('Sessions live récupérées:', sessions)),
+      catchError(this.handleError)
+    );
+  }
+
+  // Nouvelle méthode : Récupérer les sessions live d’un expert spécifique
+  getExpertLiveSessions(): Observable<LiveSession[]> {
+    return this.http.get<LiveSession[]>(
+      `${this.baseUrl}/live/expert/sessions`,
+      { headers: this.getHeaders() }
+    ).pipe(
+      tap(sessions => console.log('Sessions live de l’expert récupérées:', sessions)),
+      catchError(this.handleError)
+    );
+  }
+
+  // Nouvelle méthode : Supprimer une session live spécifique
+  deleteLiveSession(sessionId: number): Observable<{ message: string }> {
+    return this.http.delete<{ message: string }>(
+      `${this.baseUrl}/live/session/${sessionId}`,
+      { headers: this.getHeaders() }
+    ).pipe(
+      tap(response => console.log('Session live supprimée:', response)),
       catchError(this.handleError)
     );
   }
@@ -305,6 +379,28 @@ export class ApiService {
       `${this.baseUrl}/chat/history/delete`,
       { headers: this.getHeaders() }
     ).pipe(catchError(this.handleError));
+  }
+
+  updateCallStatus(farmerUsername: string, expertUsername: string, callId: number, status: 'ongoing' | 'received' | 'missed' | 'ended'): Observable<{ message: string }> {
+    const url = `${this.baseUrl}/expert/session/${encodeURIComponent(farmerUsername)}/${encodeURIComponent(expertUsername)}/call_status`;
+    const body = { call_id: callId, status };
+    console.log('Mise à jour statut appel:', url, body);
+    return this.http.post<{ message: string }>(url, body, { headers: this.getHeaders() }).pipe(
+      tap(response => console.log('Statut appel mis à jour:', response)),
+      catchError(this.handleError)
+    );
+  }
+
+  getCallLogs(farmerUsername: string, expertUsername: string, requestId?: number): Observable<CallLog[]> {
+    let url = `${this.baseUrl}/expert/session/${encodeURIComponent(farmerUsername)}/${encodeURIComponent(expertUsername)}/call_logs`;
+    if (requestId !== undefined) {
+      url += `?request_id=${requestId}`;
+    }
+    console.log('Récupération logs appels:', url);
+    return this.http.get<CallLog[]>(url, { headers: this.getHeaders() }).pipe(
+      tap(logs => console.log('Logs appels récupérés:', logs)),
+      catchError(this.handleError)
+    );
   }
 
   getConversations(): Observable<ChatHistory[]> {
@@ -456,6 +552,7 @@ export class ApiService {
   }
 
   logout(): void {
+    this.websocketService.disconnect();
     localStorage.removeItem('access_token');
     localStorage.removeItem('role');
     localStorage.removeItem('user_id');

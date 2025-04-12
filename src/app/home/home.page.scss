@@ -127,9 +127,3 @@ ion-content {
     &.profile .app-icon { color: #9c27b0; } // Violet pour Profil
   }
 }
-
-// Animation de rebond pour les icônes
-@keyframes bounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-5px); }
-}

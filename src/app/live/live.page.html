@@ -11,7 +11,12 @@
 </ion-header>
 
 <ion-content class="ion-padding live-content">
-  <!-- Sélecteur de chaînes -->
+  <!-- Bouton pour démarrer un live (réservé aux experts) -->
+  <div class="live-controls" *ngIf="isExpert">
+    <ion-button color="success" (click)="startLive()">Démarrer un Live</ion-button>
+  </div>
+
+  <!-- Sélecteur de chaînes statiques -->
   <ion-item class="channel-selector">
     <ion-label>Choisir une chaîne</ion-label>
     <ion-select [(ngModel)]="selectedChannel" (ionChange)="changeChannel()" interface="popover">
@@ -23,15 +28,51 @@
     </ion-select>
   </ion-item>
 
+  <!-- Liste des sessions live en cours (pour tous) -->
+  <ion-card class="sessions-card">
+    <ion-card-header>
+      <ion-card-title>Sessions en Direct</ion-card-title>
+    </ion-card-header>
+    <ion-card-content>
+      <ion-list>
+        <ion-item *ngFor="let session of liveSessions" class="session-item">
+          <ion-label>{{ session.title }} - {{ session.expert_username }} ({{ session.status }})</ion-label>
+          <ion-button slot="end" color="primary" (click)="playLive(session)">Regarder</ion-button>
+          <ion-button slot="end" color="danger" *ngIf="isExpert && session.status === 'active' && session.expert_username === username" (click)="endLive(session.session_id)">Arrêter</ion-button>
+        </ion-item>
+        <ion-item *ngIf="liveSessions.length === 0">
+          <ion-label>Aucune session en direct pour le moment.</ion-label>
+        </ion-item>
+      </ion-list>
+    </ion-card-content>
+  </ion-card>
+
+  <!-- Liste des sessions de l'expert (réservé aux experts) -->
+  <ion-card class="sessions-card" *ngIf="isExpert">
+    <ion-card-header>
+      <ion-card-title>Mes Sessions Live</ion-card-title>
+    </ion-card-header>
+    <ion-card-content>
+      <ion-list>
+        <ion-item *ngFor="let session of expertLiveSessions" class="session-item">
+          <ion-label>{{ session.title }} - {{ session.status }} ({{ session.started_at | date:'short' }})</ion-label>
+          <ion-button slot="end" color="primary" (click)="playLive(session)" *ngIf="session.status === 'active'">Regarder</ion-button>
+          <ion-button slot="end" color="danger" (click)="deleteLive(session.session_id)">Supprimer</ion-button>
+        </ion-item>
+        <ion-item *ngIf="expertLiveSessions.length === 0">
+          <ion-label>Aucune session enregistrée.</ion-label>
+        </ion-item>
+      </ion-list>
+    </ion-card-content>
+  </ion-card>
+
   <!-- Section Vidéo -->
   <ion-card class="video-card">
     <ion-card-content>
       <ion-spinner *ngIf="isLoading" name="crescent" class="video-spinner"></ion-spinner>
-       <!--<div *ngIf="videoError" class="video-error">
-       <p>Erreur lors du chargement de la vidéo. Veuillez réessayer.</p> 
-      </div> -->
       <object id="broadcast-video" type="video/broadcast" class="live-video"></object>
       <video id="hls-video" class="live-video" controls style="display: none;"></video>
+      <p *ngIf="videoError" class="video-error">Erreur de chargement du flux vidéo.</p>
     </ion-card-content>
   </ion-card>
 
@@ -41,11 +82,11 @@
       <ion-card-title>Commentaires en Direct</ion-card-title>
     </ion-card-header>
     <ion-card-content>
-      <ion-list class="comments-list">
+      <ion-list class="comments-list" #commentsList>
         <ion-item *ngFor="let comment of comments" class="comment-item">
           <div class="comment-bubble">
             <div class="comment-header">
-              <ion-avatar>
+              <ion-avatar class="comment-avatar">
                 <img src="https://ionicframework.com/docs/img/demos/avatar.svg" alt="Avatar">
               </ion-avatar>
               <div class="comment-meta">
@@ -55,6 +96,10 @@
             </div>
             <div class="comment-content">
               <p>{{ comment.comment }}</p>
+            </div>
+            <div class="comment-footer">
+              <ion-icon name="heart-outline" class="like-icon"></ion-icon>
+              <span class="like-count">0</span>
             </div>
           </div>
         </ion-item>
@@ -68,7 +113,7 @@
           class="comment-input-field"
         ></ion-input>
         <ion-button slot="end" color="primary" (click)="sendComment()" class="send-btn">
-          <ion-icon name="leaf-outline" slot="icon-only"></ion-icon>
+          <ion-icon name="send" slot="icon-only"></ion-icon>
         </ion-button>
       </ion-item>
     </ion-card-content>

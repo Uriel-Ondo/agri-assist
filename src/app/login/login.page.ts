@@ -1,5 +1,5 @@
 import { Component } from '@angular/core';
-import { IonicModule, AlertController } from '@ionic/angular'; // Ajout de AlertController ici
+import { IonicModule, AlertController } from '@ionic/angular';
 import { Router } from '@angular/router';
 import { ApiService } from '../services/api.service';
 import { FormsModule } from '@angular/forms';
@@ -23,18 +23,37 @@ export class LoginPage {
   ) {}
 
   async login() {
-    this.apiService.login(this.email, this.password).subscribe({
-      next: (response: any) => {
-        localStorage.setItem('access_token', response.access_token);
-        localStorage.setItem('role', response.role);
-        localStorage.setItem('user_id', response.user_id);
-        this.router.navigate(['/tabs/home']);
-      },
-      error: (error: any) => {
-        console.error('Erreur lors de la connexion:', error);
-        this.presentAlert('Erreur', error.message || 'Identifiants invalides.');
-      }
-    });
+    if (!this.email || !this.password) {
+      await this.presentAlert('Erreur', 'Veuillez remplir tous les champs.');
+      return;
+    }
+
+    try {
+      this.apiService.login(this.email, this.password).subscribe({
+        next: async (response: { access_token: string; role: string; user: { id: number; username: string } }) => {
+          console.log('Réponse de connexion:', response);
+          if (!response.access_token || !response.role || !response.user || !response.user.id) {
+            console.error('Structure de réponse invalide:', response);
+            await this.presentAlert('Erreur', 'Réponse du serveur invalide. Veuillez réessayer.');
+            return;
+          }
+          localStorage.setItem('access_token', response.access_token);
+          localStorage.setItem('role', response.role);
+          localStorage.setItem('user_id', String(response.user.id));
+          console.log('user_id stocké:', localStorage.getItem('user_id'));
+
+          await this.router.navigate(['/tabs/home']);
+          console.log('Navigation vers /tabs/home réussie');
+        },
+        error: async (error: any) => {
+          console.error('Erreur lors de la connexion:', error);
+          await this.presentAlert('Erreur', error.message || 'Identifiants invalides.');
+        }
+      });
+    } catch (err) {
+      console.error('Erreur inattendue dans login:', err);
+      await this.presentAlert('Erreur', 'Une erreur inattendue est survenue.');
+    }
   }
 
   async forgotPassword() {
@@ -48,16 +67,21 @@ export class LoginPage {
         }
       ],
       buttons: [
-        {
-          text: 'Annuler',
-          role: 'cancel'
-        },
+        { text: 'Annuler', role: 'cancel' },
         {
           text: 'Envoyer',
-          handler: (data) => {
+          handler: async (data) => {
+            if (!data.email) {
+              await this.presentAlert('Erreur', 'Veuillez entrer un email.');
+              return;
+            }
             this.apiService.requestPasswordReset(data.email).subscribe({
-              next: () => this.presentAlert('Succès', 'Un lien de réinitialisation a été envoyé à votre email.'),
-              error: (error) => this.presentAlert('Erreur', error.message || 'Erreur lors de la demande.')
+              next: async () => {
+                await this.presentAlert('Succès', 'Un lien de réinitialisation a été envoyé à votre email.');
+              },
+              error: async (error) => {
+                await this.presentAlert('Erreur', error.message || 'Erreur lors de la demande.');
+              }
             });
           }
         }
@@ -67,7 +91,9 @@ export class LoginPage {
   }
 
   goToRegister() {
-    this.router.navigate(['/register']);
+    this.router.navigate(['/register']).catch(err => {
+      console.error('Erreur de navigation vers register:', err);
+    });
   }
 
   async presentAlert(header: string, message: string) {

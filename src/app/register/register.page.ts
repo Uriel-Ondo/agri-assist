@@ -18,7 +18,7 @@ export class RegisterPage {
   email: string = '';
   password: string = '';
   confirmPassword: string = '';
-  role: string = ''; // Ajout du rôle
+  role: string = ''; // 'farmer' ou 'expert'
 
   constructor(
     private apiService: ApiService,
@@ -27,30 +27,45 @@ export class RegisterPage {
   ) {}
 
   async register() {
+    // Validation des champs
+    if (!this.username || !this.email || !this.password || !this.confirmPassword || !this.role) {
+      this.presentAlert('Erreur', 'Tous les champs sont requis.');
+      return;
+    }
+
     if (this.password !== this.confirmPassword) {
       this.presentAlert('Erreur', 'Les mots de passe ne correspondent pas.');
       return;
     }
 
-    if (!this.role) {
-      this.presentAlert('Erreur', 'Veuillez sélectionner un rôle.');
+    if (!['farmer', 'expert'].includes(this.role)) {
+      this.presentAlert('Erreur', 'Rôle invalide. Choisissez "farmer" ou "expert".');
       return;
     }
 
-    this.apiService.register(this.username, this.email, this.password, this.confirmPassword, this.role).subscribe({
-      next: () => {
-        this.presentAlert('Succès', 'Inscription réussie ! Vous pouvez maintenant vous connecter.');
-        this.router.navigate(['/login']);
-      },
-      error: (error: any) => {
-        console.error('Erreur lors de l\'inscription:', error);
-        this.presentAlert('Erreur', error.message || 'Erreur lors de l\'inscription.');
-      }
-    });
+    try {
+      this.apiService.register(this.username, this.email, this.password, this.confirmPassword, this.role).subscribe({
+        next: async () => {
+          await this.presentAlert('Succès', 'Inscription réussie ! Vous pouvez maintenant vous connecter.');
+          this.router.navigate(['/login']).catch(err => {
+            console.error('Erreur de navigation vers login:', err);
+          });
+        },
+        error: async (error: any) => {
+          console.error('Erreur lors de l\'inscription:', error);
+          await this.presentAlert('Erreur', error.message || 'Erreur lors de l\'inscription.');
+        }
+      });
+    } catch (err) {
+      console.error('Erreur inattendue dans register:', err);
+      await this.presentAlert('Erreur', 'Une erreur inattendue est survenue.');
+    }
   }
 
   goToLogin() {
-    this.router.navigate(['/login']);
+    this.router.navigate(['/login']).catch(err => {
+      console.error('Erreur de navigation vers login:', err);
+    });
   }
 
   async presentAlert(header: string, message: string) {

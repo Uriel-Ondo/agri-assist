@@ -1,62 +1,85 @@
+<ion-header>
+  <ion-toolbar color="primary">
+    <ion-title>Inscription</ion-title>
+  </ion-toolbar>
+</ion-header>
+
 <ion-content class="ion-padding">
-  <div class="register-container">
-    <h1>Inscription</h1>
-    <form (ngSubmit)="register()" #registerForm="ngForm">
-      <ion-item lines="none" class="input-item">
-        <ion-input 
-          type="text" 
-          placeholder="Nom d'utilisateur" 
-          [(ngModel)]="username" 
-          name="username" 
-          required>
-        </ion-input>
-      </ion-item>
-      <ion-item lines="none" class="input-item">
-        <ion-input 
-          type="email" 
-          placeholder="Adresse email" 
-          [(ngModel)]="email" 
-          name="email" 
-          required 
-          email>
-        </ion-input>
-      </ion-item>
-      <ion-item lines="none" class="input-item">
-        <ion-input 
-          type="password" 
-          placeholder="Mot de passe" 
-          [(ngModel)]="password" 
-          name="password" 
-          required 
-          minlength="6">
-        </ion-input>
-      </ion-item>
-      <ion-item lines="none" class="input-item">
-        <ion-input 
-          type="password" 
-          placeholder="Confirmer le mot de passe" 
-          [(ngModel)]="confirmPassword" 
-          name="confirmPassword" 
-          required 
-          [pattern]="password">
-        </ion-input>
-      </ion-item>
-      <ion-item lines="none" class="input-item">
-        <ion-select 
-          placeholder="Choisissez votre rôle" 
-          [(ngModel)]="role" 
-          name="role" 
-          required>
-          <ion-select-option value="farmer">Agriculteur (Farmer)</ion-select-option>
-          <ion-select-option value="expert">Expert</ion-select-option>
-        </ion-select>
-      </ion-item>
-      <ion-button type="submit" expand="block" color="success" [disabled]="!registerForm.valid || password !== confirmPassword">
-        S'inscrire
-      </ion-button>
-    </form>
-    <div class="login-link">
-      <a (click)="goToLogin()">Vous avez déjà un compte ? Connectez-vous</a>
-    </div>
-  </div>
+  <ion-card class="register-card">
+    <ion-card-header>
+      <ion-card-title>Créer un compte</ion-card-title>
+      <ion-card-subtitle>Rejoignez Agri Assist</ion-card-subtitle>
+    </ion-card-header>
+    <ion-card-content>
+      <form (ngSubmit)="register()" #registerForm="ngForm">
+        <ion-item lines="full">
+          <ion-icon name="person-outline" slot="start"></ion-icon>
+          <ion-input
+            label="Nom d'utilisateur"
+            labelPlacement="floating"
+            [(ngModel)]="username"
+            name="username"
+            type="text"
+            required
+            placeholder="Entrez votre nom d'utilisateur"
+          ></ion-input>
+        </ion-item>
+        <ion-item lines="full">
+          <ion-icon name="mail-outline" slot="start"></ion-icon>
+          <ion-input
+            label="Email"
+            labelPlacement="floating"
+            [(ngModel)]="email"
+            name="email"
+            type="email"
+            required
+            placeholder="Entrez votre email"
+          ></ion-input>
+        </ion-item>
+        <ion-item lines="full">
+          <ion-icon name="lock-closed-outline" slot="start"></ion-icon>
+          <ion-input
+            label="Mot de passe"
+            labelPlacement="floating"
+            [(ngModel)]="password"
+            name="password"
+            type="password"
+            required
+            minlength="6"
+            placeholder="Entrez votre mot de passe"
+          ></ion-input>
+        </ion-item>
+        <ion-item lines="full">
+          <ion-icon name="lock-closed-outline" slot="start"></ion-icon>
+          <ion-input
+            label="Confirmer le mot de passe"
+            labelPlacement="floating"
+            [(ngModel)]="confirmPassword"
+            name="confirmPassword"
+            type="password"
+            required
+            [pattern]="password"
+            placeholder="Confirmez votre mot de passe"
+          ></ion-input>
+        </ion-item>
+
+        <!-- Rôle défini en champ caché -->
+        <input type="hidden" [(ngModel)]="role" name="role" value="farmer" />
+
+        <ion-button
+          expand="block"
+          type="submit"
+          color="success"
+          [disabled]="!registerForm.valid || password !== confirmPassword"
+        >
+          S'inscrire
+        </ion-button>
+      </form>
+      <div class="login-link">
+        <ion-button expand="block" fill="outline" color="medium" (click)="goToLogin()">
+          Déjà un compte ? Connectez-vous
+        </ion-button>
+      </div>
+    </ion-card-content>
+  </ion-card>
 </ion-content>

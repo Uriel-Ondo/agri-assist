@@ -4,6 +4,8 @@ import { HttpClientModule } from '@angular/common/http';
 import { IonicModule } from '@ionic/angular';
 import { AppComponent } from './app.component';
 import { AppRoutingModule } from './app-routing.module';
+import { WebsocketService } from './services/websocket.service';
+import { ApiService } from './services/api.service';
 
 @NgModule({
   declarations: [AppComponent],
@@ -13,6 +15,7 @@ import { AppRoutingModule } from './app-routing.module';
     IonicModule.forRoot(),
     AppRoutingModule
   ],
+  providers: [WebsocketService, ApiService],
   bootstrap: [AppComponent]
 })
 export class AppModule {}

@@ -1,10 +1,12 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { IonicModule } from '@ionic/angular';
 import { ApiService } from '../services/api.service';
 import { Router } from '@angular/router';
 import { AlertController } from '@ionic/angular';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { WebsocketService } from '../services/websocket.service'; // Ajout pour vérifier la connexion
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-profile',
@@ -13,19 +15,35 @@ import { FormsModule } from '@angular/forms';
   standalone: true,
   imports: [IonicModule, CommonModule, FormsModule]
 })
-export class ProfilePage implements OnInit {
+export class ProfilePage implements OnInit, OnDestroy {
   profile: any = { username: '', email: '', role: '', is_admin: false };
   isEditing: boolean = false;
   updatedProfile: { username?: string; email?: string } = {};
+  isConnected: boolean = false; // État de la connexion WebSocket
+  private subscriptions: Subscription[] = [];
 
   constructor(
     private apiService: ApiService,
+    private websocketService: WebsocketService, // Ajout du service WebSocket
     private router: Router,
     private alertController: AlertController
   ) {}
 
   ngOnInit() {
     this.loadProfile();
+    // Écouter l'état de la connexion WebSocket
+    this.subscriptions.push(
+      this.websocketService.getConnectionStatus().subscribe(status => {
+        this.isConnected = status;
+        console.log('État WebSocket dans Profile:', status);
+      })
+    );
+
+    // Vérifier si l'utilisateur est déjà connecté
+    const token = localStorage.getItem('access_token');
+    if (token && !this.isConnected) {
+      this.websocketService.connect();
+    }
   }
 
   loadProfile() {
@@ -34,9 +52,9 @@ export class ProfilePage implements OnInit {
         this.profile = data;
         this.updatedProfile = { username: data.username, email: data.email };
       },
-      error: (error: any) => {
+      error: async (error: any) => {
         console.error('Erreur lors de la récupération du profil:', error);
-        this.presentAlert('Erreur', 'Impossible de charger le profil.');
+        await this.presentAlert('Erreur', 'Impossible de charger le profil.');
       }
     });
   }
@@ -54,24 +72,21 @@ export class ProfilePage implements OnInit {
       this.updatedProfile.email !== this.profile.email;
 
     if (!hasChanges) {
-      this.presentAlert('Information', 'Aucune modification détectée.');
+      await this.presentAlert('Information', 'Aucune modification détectée.');
       this.isEditing = false;
       return;
     }
 
     this.apiService.updateProfile(this.updatedProfile).subscribe({
-      next: (response: any) => {
+      next: async (response: any) => {
         this.profile = { ...this.profile, ...response };
         this.isEditing = false;
-        this.presentAlert('Succès', 'Profil mis à jour avec succès.');
+        await this.presentAlert('Succès', 'Profil mis à jour avec succès.');
       },
-      error: (error: any) => {
+      error: async (error: any) => {
         console.error('Erreur lors de la mise à jour du profil:', error);
-        let errorMessage = 'Erreur lors de la mise à jour du profil.';
-        if (error.error.message) {
-          errorMessage = error.error.message;
-        }
-        this.presentAlert('Erreur', errorMessage);
+        let errorMessage = error.message || 'Erreur lors de la mise à jour du profil.';
+        await this.presentAlert('Erreur', errorMessage);
       }
     });
   }
@@ -87,10 +102,12 @@ export class ProfilePage implements OnInit {
         },
         {
           text: 'Oui',
-          handler: () => {
-            this.apiService.logout();
-            this.router.navigate(['/login']);
-            this.presentAlert('Succès', 'Vous êtes déconnecté.');
+          handler: async () => {
+            this.apiService.logout(); // Déconnecte WebSocket et vide localStorage
+            await this.presentAlert('Succès', 'Vous êtes déconnecté.');
+            this.router.navigate(['/login']).catch(err => {
+              console.error('Erreur de navigation vers login:', err);
+            });
           }
         }
       ]
@@ -99,7 +116,9 @@ export class ProfilePage implements OnInit {
   }
 
   goToDashboard() {
-    this.router.navigate(['/admin']);
+    this.router.navigate(['/admin']).catch(err => {
+      console.error('Erreur de navigation vers admin:', err);
+    });
   }
 
   async presentAlert(header: string, message: string) {
@@ -109,5 +128,10 @@ export class ProfilePage implements OnInit {
       buttons: ['OK']
     });
     await alert.present();
+  }
+
+  ngOnDestroy() {
+    this.subscriptions.forEach(sub => sub.unsubscribe());
+    // Ne pas déconnecter WebSocket ici pour maintenir la session active
   }
 }

@@ -27,7 +27,7 @@
               <ion-select-option value="video">Vidéo</ion-select-option>
               <ion-select-option value="audio">Audio</ion-select-option>
             </ion-select>
-            <input *ngIf="requestType !== 'text'" type="file" (change)="onFileSelected($event)" accept=".jpg,.jpeg,.png,.mp4,.wav,.mp3" class="file-input" />
+            <input *ngIf="requestType !== 'text'" type="file" (change)="onFileSelected($event)" accept=".jpg,.jpeg,.png,.mp4,.wav,.mp3,.webm" class="file-input" />
           </ion-item>
           <ion-button expand="block" color="success" (click)="sendPublicRequest()">Envoyer</ion-button>
         </ion-card-content>
@@ -35,7 +35,7 @@
 
       <ion-list class="sessions-list">
         <ion-list-header>Mes conversations</ion-list-header>
-        <ion-item *ngFor="let session of sessions" button (click)="openSession(session.farmer_username, session.expert_username)">
+        <ion-item *ngFor="let session of sessions" button (click)="openSession(session.farmer_username, session.expert_username, session.request_id ?? undefined)" [hidden]="hiddenSessions.has(session.session_id)">
           <ion-avatar slot="start">
             <ion-img src="/assets/default-avatar.png"></ion-img>
           </ion-avatar>
@@ -47,6 +47,9 @@
         <ion-item *ngIf="sessions.length === 0">
           <ion-label>Aucune conversation.</ion-label>
         </ion-item>
+        <ion-item button (click)="showHiddenSessions()" *ngIf="hiddenSessions.size > 0">
+          <ion-label>Voir les conversations masquées ({{ hiddenSessions.size }})</ion-label>
+        </ion-item>
       </ion-list>
     </div>
 
@@ -55,10 +58,10 @@
         <ion-list-header>Demandes en attente</ion-list-header>
         <ion-item *ngFor="let session of messages" button [disabled]="session.responded" (click)="handleMessageClick(session)">
           <ion-avatar slot="start">
-            <ion-img [src]="session.request_type === 'image' ? session.content : '/assets/default-avatar.png'"></ion-img>
+            <ion-img [src]="session.request_type === 'image' ? session.content : '/assets/default-avatar.png'" (ionError)="session.content = '/assets/default-avatar.png'"></ion-img>
           </ion-avatar>
           <ion-label>
-            <h2>{{ session.content }}</h2>
+            <h2>{{ session.request_type === 'text' ? session.content : session.request_type }}</h2>
             <p>{{ session.username }} - {{ session.created_at | date:'short' }}</p>
           </ion-label>
           <ion-button slot="end" [disabled]="session.responded" color="primary">
@@ -69,7 +72,7 @@
 
       <ion-list class="sessions-list">
         <ion-list-header>Conversations actives</ion-list-header>
-        <ion-item *ngFor="let session of sessions" button (click)="openSession(session.farmer_username, session.expert_username)">
+        <ion-item *ngFor="let session of sessions" button (click)="openSession(session.farmer_username, session.expert_username, session.request_id ?? undefined)" [hidden]="hiddenSessions.has(session.session_id)">
           <ion-avatar slot="start">
             <ion-img src="/assets/default-avatar.png"></ion-img>
           </ion-avatar>
@@ -78,25 +81,38 @@
             <p>{{ session.last_message || 'Aucun message' }} - {{ session.created_at | date:'short' }}</p>
           </ion-label>
         </ion-item>
+        <ion-item button (click)="showHiddenSessions()" *ngIf="hiddenSessions.size > 0">
+          <ion-label>Voir les conversations masquées ({{ hiddenSessions.size }})</ion-label>
+        </ion-item>
+      </ion-list>
+      <ion-list *ngIf="currentSession" class="call-logs">
+        <ion-list-header>Historique des appels</ion-list-header>
+        <ion-item *ngFor="let call of callLogs">
+          <ion-label>
+            <h2>{{ call.type === 'video' ? 'Vidéo' : 'Audio' }} - {{ call.caller }} -> {{ call.receiver }}</h2>
+            <p>{{ call.status }} - {{ call.timestamp | date:'short' }}</p>
+          </ion-label>
+        </ion-item>
       </ion-list>
     </div>
   </div>
 
   <div *ngIf="currentSession" class="chat-view">
-    <ion-toolbar color="light" class="chat-header">
-      <ion-title>{{ currentSession.farmerUsername }} - {{ currentSession.expertUsername }}</ion-title>
-      <ion-buttons slot="end">
+    <ion-toolbar color="light" class="chat-actions">
+      <ion-buttons slot="start">
         <ion-button (click)="startCall('video')" color="success" [disabled]="userRole === 'farmer' && isSessionEnded">
           <ion-icon name="videocam"></ion-icon>
         </ion-button>
         <ion-button (click)="startCall('audio')" color="success" [disabled]="userRole === 'farmer' && isSessionEnded">
           <ion-icon name="call"></ion-icon>
         </ion-button>
+      </ion-buttons>
+      <ion-buttons slot="end">
         <ion-button *ngIf="userRole === 'expert'" (click)="endSession()" color="warning">
-          <ion-icon name="stop"></ion-icon> Terminer
+          <ion-icon name="stop"></ion-icon>
         </ion-button>
-        <ion-button (click)="deleteSession()" color="danger">
-          <ion-icon name="trash"></ion-icon>
+        <ion-button (click)="hideSession()" color="medium">
+          <ion-icon name="eye-off"></ion-icon>
         </ion-button>
       </ion-buttons>
     </ion-toolbar>
@@ -105,9 +121,20 @@
       <div *ngFor="let msg of sessionMessages" class="message" [ngClass]="{'sent': msg.sender_username === profile?.username, 'received': msg.sender_username !== profile?.username}">
         <div class="message-content">
           <p *ngIf="msg.message_type === 'text'">{{ msg.content }}</p>
-          <img *ngIf="msg.message_type === 'image'" [src]="msg.content" alt="Image" class="message-image" />
-          <video *ngIf="msg.message_type === 'video' && msg.content.startsWith('http')" controls [src]="msg.content" class="message-video"></video>
-          <audio *ngIf="msg.message_type === 'audio' && msg.content.startsWith('http')" controls [src]="msg.content" class="message-audio"></audio>
+          <ion-img *ngIf="msg.message_type === 'image' && msg.content" [src]="msg.content" (click)="showImageModal(msg.content)" class="message-image" style="max-width: 200px; max-height: 200px; object-fit: cover;"></ion-img>
+          <p *ngIf="msg.message_type === 'image' && !msg.content" class="error-text">Image non disponible</p>
+          <video *ngIf="msg.message_type === 'video' && msg.content" controls [src]="msg.content" class="message-video" style="max-width: 300px; max-height: 300px;"></video>
+          <p *ngIf="msg.message_type === 'video' && !msg.content" class="error-text">Vidéo non disponible</p>
+          <div *ngIf="msg.message_type === 'audio' && msg.content" class="audio-player">
+            <ion-button fill="clear" (click)="toggleAudio(msg)" class="play-pause-btn">
+              <ion-icon [name]="isPlaying(msg) ? 'pause' : 'play'"></ion-icon>
+            </ion-button>
+            <div class="progress-bar" (click)="seekAudio($event, msg)">
+              <div class="progress" [style.width]="getProgress(msg)"></div>
+            </div>
+            <span class="duration">{{ getDuration(msg) }}</span>
+          </div>
+          <p *ngIf="msg.message_type === 'audio' && !msg.content" class="error-text">Audio non disponible</p>
           <p *ngIf="msg.message_type === 'audio_call' || msg.message_type === 'video_call'" class="call-message">{{ msg.content }}</p>
           <p *ngIf="msg.message_type === 'session_ended'" class="system-message">{{ msg.content }}</p>
           <div class="message-footer">
@@ -119,6 +146,9 @@
             </div>
           </div>
         </div>
+      </div>
+      <div *ngIf="sessionMessages.length === 0" class="no-messages">
+        <p>Aucun message dans cette conversation pour le moment.</p>
       </div>
     </div>
 
@@ -136,7 +166,7 @@
         <ion-button (click)="toggleRecording()" [color]="isRecording ? 'danger' : 'primary'">
           <ion-icon [name]="isRecording ? 'stop' : 'mic'"></ion-icon>
         </ion-button>
-        <input type="file" (change)="onFileSelected($event)" accept=".jpg,.jpeg,.png,.mp4" class="file-input" />
+        <input type="file" (change)="onFileSelected($event)" accept=".jpg,.jpeg,.png,.mp4,.wav,.mp3,.webm" class="file-input" />
       </ion-item>
     </ion-footer>
   </div>

@@ -106,12 +106,6 @@ ion-tab-button.tab-button {
   }
 }
 
-// Animation de rebond
-@keyframes bounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
-}
-
 // Ajustements responsives
 @media (max-width: 400px) { // Très petits écrans (ex. vieux téléphones)
   ion-tab-bar.custom-tab-bar {
